@@ -165,7 +165,18 @@ FDisClus_phy = as.phylo(FDis_clust)
 labelClust = as.character (row.names(fish.traits))
 FDisClus_phy$tip.label = labelClust
 
-colours=c('red','green','blue','orange','forestgreen', 'purple')
+colours=c('red','green','blue','orange','forestgreen', 'purple','yellow', 'black', 'grey')
 
-clus6<-cutree(FDis_clust, k=6) #this needs to be changed?
+clus9<-cutree(FDis_clust, k=9) #this needs to be changed?
+
+plot(FDisClus_phy, type="fan", use.edge.length = TRUE, node.pos = NULL,
+     show.tip.label = TRUE, show.node.label = FALSE, tip.color = colours[clus9] ,
+     edge.width = 1, edge.lty = 1, font = 2, cex = 0.5, label.offset = 0.1)
+
+
+fish_groups<-data.frame(cutree(FDis_clust, k=9))
+colnames(fish_groups)<- 'func_group'
+
+#write functional group
+write.csv(fish_groups, 'fish_groups.csv')
 
