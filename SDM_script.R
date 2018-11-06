@@ -1,4 +1,5 @@
 install.packages('corrplot')
+install.packages('usdm')
 #SDM Practise##
 
 library(sdmpredictors)
@@ -13,6 +14,7 @@ library(sf)
 library(rgeos)
 library(vegan)
 library(corrplot)
+library(usdm)
 
 #read in Japan if starting ###### START HERE 
 japan_outline<-readOGR('plotting/japan_outline.shp')
@@ -110,12 +112,12 @@ chloro_japan<-crop(chloro, japan_extent)
 plot(chloro_japan, col=my.colors(1000))
 
 #extract bottom light (mean par)   #maybe not for fish?
-#light<-load_layers('BO_parmean')
-#light_japan<-crop(light, japan_extent)
+light<-load_layers('BO_parmean')
+light_japan<-crop(light, japan_extent)
 
-#my.colors = colorRampPalette(c("#5E85B8","#EDF0C0","#C13127")) 
-#plot(light_japan,col=my.colors(1000),axes=FALSE, box=FALSE) 
-#title(cex.sub = 1.25, sub = "Mean PAR") 
+my.colors = colorRampPalette(c("#5E85B8","#EDF0C0","#C13127")) 
+plot(light_japan,col=my.colors(1000),axes=FALSE, box=FALSE) 
+title(cex.sub = 1.25, sub = "Mean PAR") 
 
 #extract current velocity (mean at min depth)
 current<-load_layers('BO2_curvelmean_bdmin')
@@ -278,6 +280,17 @@ box()
 #sort out the environmental data
 #stack all the predictors into one rasterstack
 predictors<-stack(light_japan, chloro_japan, temp_japan, ox_japan, current_japan)
+
+
+#using the VIF? Doesn't seem to do anything? ---- 
+v1<-vifstep(predictors, th=10)
+
+v1@results    
+
+rastervif<-exclude(predictors, v1)
+plot(rastervif)
+
+plot(temp_japan)
 
 #check all the names
 names(predictors)
