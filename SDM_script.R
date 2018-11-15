@@ -468,3 +468,8 @@ map.world <- map_data("world")
 
 
 
+#plot the distributions of func group at each site -poisson
+ggplot(fgroup_site, aes(x=abundance))+
+  geom_histogram()+
+  facet_wrap(~group)
+
