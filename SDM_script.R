@@ -1,3 +1,5 @@
+install.packages('corrplot')
+install.packages('usdm')
 #SDM Practise##
 
 library(sdmpredictors)
@@ -10,6 +12,9 @@ library(mapdata)
 library(ggmap)
 library(sf)
 library(rgeos)
+library(vegan)
+library(corrplot)
+library(usdm)
 
 #read in Japan if starting ###### START HERE 
 japan_outline<-readOGR('plotting/japan_outline.shp')
@@ -78,6 +83,10 @@ bathy_shallow2[bathy_shallow2 < -100]<-NA
 
 plot(bathy_shallow2, col=my.colors(1000))   #bathy_shallow2 = better 
 
+
+#32 sites so maximum six environmental variables?
+
+
 #extract temp data (SST min)
 sst_min <- load_layers("BO_sstmin") 
 
@@ -95,20 +104,36 @@ title(cex.sub=1.25, sub='Maximum temperature at the sea bottom (ºC)')
 #plot(pp_japan,col=my.colors(1000),axes=FALSE, box=FALSE) 
 #title(cex.sub = 1.25, sub = "Primary Production") 
 
-#extract chlorophyll conc (mean at min depth)
+#extract chlorophyll conc (mean at min depth) 
 chloro<-load_layers('BO2_chlomean_bdmin')
 
 chloro_japan<-crop(chloro, japan_extent)
 
 plot(chloro_japan, col=my.colors(1000))
 
-#extract bottom light (mean par)
+#extract bottom light (mean par)   #maybe not for fish?
 light<-load_layers('BO_parmean')
 light_japan<-crop(light, japan_extent)
 
 my.colors = colorRampPalette(c("#5E85B8","#EDF0C0","#C13127")) 
 plot(light_japan,col=my.colors(1000),axes=FALSE, box=FALSE) 
 title(cex.sub = 1.25, sub = "Mean PAR") 
+
+#extract current velocity (mean at min depth)
+current<-load_layers('BO2_curvelmean_bdmin')
+
+current_japan<-crop(current, japan_extent)
+
+plot(current_japan, col=my.colors(1000))
+
+
+#extract 02 conc, mean at min depth
+ox<-load_layers('BO2_dissoxmean_bdmin')
+
+ox_japan<-crop(ox, japan_extent)
+
+plot(ox_japan, col=my.colors(1000))
+
 
 ##extract pH
 #ph<-load_layers('BO_ph')
@@ -236,8 +261,9 @@ geographic.extent <- extent(x = c(min.lon, max.lon, min.lat, max.lat))
 plot(japan_outline, 
      xlim = c(min.lon, max.lon),
      ylim = c(min.lat, max.lat),
-     axes = TRUE, 
-     col = "grey95")
+     col = "grey95",
+     axes = TRUE
+     )
 
 # Add the points for individual observation
 points(x = obs.data$lon, 
@@ -253,7 +279,18 @@ box()
 
 #sort out the environmental data
 #stack all the predictors into one rasterstack
-predictors<-stack(light_japan, chloro_japan, temp_japan)
+predictors<-stack(light_japan, chloro_japan, temp_japan, ox_japan, current_japan)
+
+
+#using the VIF? Doesn't seem to do anything? ---- 
+v1<-vifstep(predictors, th=10)
+
+v1@results    
+
+rastervif<-exclude(predictors, v1)
+plot(rastervif)
+
+plot(temp_japan)
 
 #check all the names
 names(predictors)
@@ -330,12 +367,26 @@ sdmdata<-presvals
 #sdmdata <- data.frame(cbind(pb, rbind(presvals, absvals)))
 
 #check for co-linearity of data
-pairs(sdmdata[,1:3], cex=0.1)  #co-linearity, learn how to deal with this?
+pairs(sdmdata[,1:5], cex=0.1)  #co-linearity, learn how to deal with this?
+
+corr<-sdmdata[,1:5]
+m<-cor(corr)
+
+corrplot(m, method='number')
+
+#don't use chlorophyll and dissolved oxygen in model as very correlated with SST (-0.92, -0.96)
+
+# OR PCA on the predictor variables
+#OR calculate VIF 
+
+
 
 
 #mask out the deep areas
 #mask the areas deeper then 100
 predictors<-mask(predictors, bathy_shallow2)
+
+plot(predictors)
 
 
 #save the sdm data and presvals to disk 
@@ -351,7 +402,7 @@ names(sdmdata)
 ggplot(sdmdata, aes(x=abundance))+
   geom_histogram()
 
-m1 <- glm(abundance ~ BO_parmean + BO2_chlomean_bdmin + BO_sstmin ,family=poisson , data=sdmdata)  ##need to reconsider as mean of transects= non integer 
+m1 <- glm(abundance ~ BO_parmean + BO_sstmin + BO2_curvelmean_bdmin ,family=poisson , data=sdmdata)  ##need to reconsider as mean of transects= non integer 
 
 class(m1)
 
@@ -386,7 +437,7 @@ plot(japan_outline, add=TRUE)
 #use group 3               #lon , lat order
 group3<-Obvs_gr_3[,c(5,4)]
 
-predictors<-stack(light_japan, chloro_japan, temp_japan)
+predictors<-stack(light_japan, temp_japan, current_japan)
 
 
 presvals <- extract(predictors, group3) #masked so doesnt work? #####PROBLEM MASK MASKS OUT SOME OF THE DATAPOINTS?? #problem:
@@ -432,7 +483,7 @@ predictors<-mask(predictors, bathy_shallow2)
 
 names(sdmdata)
 
-m1 <- glm(abundance ~ BO_parmean + BO2_chlomean_bdmin + BO_sstmin ,family=poisson , data=sdmdata)
+m1 <- glm(abundance ~ BO_parmean + BO2_curvelmean_bdmin + BO_sstmin ,family=poisson , data=sdmdata)
 
 class(m1)
 
