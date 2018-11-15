@@ -50,10 +50,10 @@ plot(chlo)
 latlon<-read.csv('JP2015_16_waypoints.csv')
 
 # Determine geographic extent of our data
-max.lat <- ceiling(max(latlon$lat))
-min.lat <- floor(min(latlon$lat))
-max.lon <- ceiling(max(latlon$lon))
-min.lon <- floor(min(latlon$lon))
+max.lat <- ceiling(max(latlon$lat)+0.5)
+min.lat <- floor(min(latlon$lat)-0.5)
+max.lon <- ceiling(max(latlon$lon)+0.5)
+min.lon <- floor(min(latlon$lon)-0.5)
 geographic.extent <- extent(x = c(min.lon, max.lon, min.lat, max.lat))
 
 #crop the data to extent and combine
@@ -95,6 +95,8 @@ RCP85_2050<-stack(RCP85_2050, chlo_future)
 #get bathy layer for mask
 #compare with the marspec bathy
 bathy2<-load_layers(c('MS_bathy_5m'))
+
+res(bathy2)
 
 bathy2_jpn<-crop(bathy2, geographic.extent)
 
@@ -157,6 +159,19 @@ names(fgroup_site)<- c('Site', 'group', 'abundance')
 
 fgroup_site$Site<-as.character(fgroup_site$Site)
 
+#remove na
+which(is.na(fgroup_site$group))
+fgroup_site<-fgroup_site[-223,]
+
+#add zeros (by making a matrix and making NA values 0 and converting back)
+site_group_matrix<-acast(fgroup_site, Site~group, value.var='abundance')
+
+which(is.na(site_group_matrix))
+site_group_matrix[which(is.na(site_group_matrix))]<-0
+
+fgroup_site<-melt(site_group_matrix, value.name = 'abundance')
+
+names(fgroup_site)<-c('Site', 'group', 'abundance')
 
 #add lat lon data to obs
 latlon<-latlon[,c(2,3,4)]
@@ -205,8 +220,8 @@ box()
 
 
 #check for NA group site
-which(is.na(fgroup_site$group)) #223
-fgroup_site<-fgroup_site[-223,]
+#which(is.na(fgroup_site$group)) #223
+#fgroup_site<-fgroup_site[-223,]
 
 
 #split data by functional group 
@@ -272,13 +287,15 @@ rmse <- function(o,p) {
 }
 
 #get the root mean square error for model 3
+rmse(obs,pr[,1] )
+rmse(obs,pr[,2] )
 rmse(obs,pr[,3] )
 
 #predict and plot 
 predict_current<-predict(m, current_preds, filename='predict_current_group1.img', mean= T, overwrite=TRUE) #mean=T the mean of the predictions for each algorithm
-.w <- which(predict_current[[1]][] > 200)
-predict_current[[1]][.w] <- NA
-par(mfrow=c(2,2))
+#.w <- which(predict_current[[1]][] > 200)
+#predict_current[[1]][.w] <- NA
+#par(mfrow=c(2,2))
 
 plot(predict_current)
 
@@ -325,10 +342,15 @@ crs(japan_outline)
 crs(meow_pred)
 
 #use meow preds for predict
+
+plot(current_preds, main=c('SST', 'Current Velocity', 'Salinity', 'Chlorophyll'))
+
+
+
 meow_now<-predict(m, meow_pred, filename='predict_current_group1.img', mean= T, overwrite=TRUE) #mean=T the mean of the predictions for each algorithm
 
 
-plot(meow_now)
+plot(meow_now, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
 
 
 
@@ -339,35 +361,93 @@ names(RCP85_2050_meow)<-names(current_preds)
 
 RCP85_2050p<-predict(m, RCP85_2050_meow, filename='predict_future_group1.img', mean=T, overwrite=TRUE)
 
-plot(RCP85_2050p, add=TRUE)
+
+
+plot(RCP85_2050p, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+plot(j)
+
 
 m
 ##ENSEMBLE MODEL for now 
 ens<-ensemble(m, newdata=meow_pred, setting=list(method='unweighted', id=c(4:9) ))
 
-par(mfrow=c(2,2))
+par(mfrow=c(1,1))
 plot(meow_now)
-plot(ens)
 
 
-#ggmap 
+#plot_ensemble ----
+plot(ens, main= '2000-2014 Ensemble')
+plot(japan_outline, add=TRUE)
+
+
 
 
 #ENSEMBLE MODEL FOR FUTURE
 ensF<-ensemble(m, newdata=RCP85_2050_meow, setting=list(method='unweighted', id=c(4:9)))
-plot(ensF, main="Rcp 8.5 2050 Ensemble")
+
+plot(ensF, main="RCP8.5 2050 Ensemble")
 plot(japan_outline, add=TRUE)
+points(group1, col='red')
 
 
-maps<-maps('world_simple')
-plot(world_simple)
-
-
-
+gui(m)
 
 
 
-###### write a loop/ functions#########
 
 
+###### write a loop/ functions for all groups#########
+
+#now with group one create SPDF
+#list<-c(paste0('Obvs_gr_', 1:length(unique(fgroup_site$group))))
+list_all<-list(Obvs_gr_1, Obvs_gr_2, Obvs_gr_3, Obvs_gr_4, Obvs_gr_5, Obvs_gr_6, Obvs_gr_7, Obvs_gr_8, Obvs_gr_9)
+
+spdf<- function(data) {
+  abundance<-data.frame(data$abundance)
+  lonlat<-data.frame(data$lon, data$lat )
+  spdf_new<- SpatialPointsDataFrame(coords=lonlat, data=abundance, proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0") )
+  spdf_new
+  return(spdf_new)
+}
+
+spdf_all<-lapply(list_all, spdf)
+
+plot(spdf_all[[1]]) 
+
+
+#loop through to create sdm data for all
+length(spdf_all)
+
+for (i in 1: length(spdf_all)){
+ sdm_data<- sdmData(data.abundance~. , train= spdf_all[[i]], predictors = current_preds)
+ assign(paste0('sdm_data_group_', i), sdm_data)
+}
+
+#loop through to create model
+
+sdm_data_list<-lapply(ls(pattern='sdm_data_group_'), get)
+
+for (i in 1:length(sdm_data_list)) {
+  m<-sdm(data.abundance~. , data= sdm_data_list[[i]], methods=c('glm', 'brt', 'rf'), 
+            replication=c('boot'),n=3,  
+            modelSettings=list(brt=list(distribution='poisson',n.minobsinnode =5,bag.fraction =1), glm=list(family='poisson')))   ##do evaluation separately 
+  assign(paste0('m_gr', i), m)
+  print(i)
+  
+}
+
+
+#loop to check rmse
+list_models<-lapply(ls(pattern="m_gr"),get)
+list_models[[1]]
+list_models[[2]]
+list_models[[3]]
+
+#now do sdm
+m<-sdm(abundance~. , data=d, methods=c('glm', 'brt', 'rf'), 
+       replication=c('boot'),n=3,  
+       modelSettings=list(brt=list(distribution='poisson',n.minobsinnode =5,bag.fraction =1), glm=list(family='poisson')))   ##do evaluation separately 
+
+m@data@features.name
+m
 
