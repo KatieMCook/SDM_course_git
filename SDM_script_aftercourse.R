@@ -258,12 +258,12 @@ group1@data  #check the mask
 
 
 #now do sdm
-m<-sdm(abundance~. , data=d, methods=c('glm', 'brt', 'rf'), 
+m1<-sdm(abundance~. , data=d, methods=c('glm', 'brt', 'rf'), 
        replication=c('boot'),n=3,  
        modelSettings=list(brt=list(distribution='poisson',n.minobsinnode =5,bag.fraction =1), glm=list(family='poisson')))   ##do evaluation separately 
 
 m@data@features.name
-m
+m1
 
 
 #library(MASS)
@@ -390,7 +390,7 @@ plot(japan_outline, add=TRUE)
 points(group1, col='red')
 
 
-gui(m)
+
 
 
 
@@ -403,7 +403,7 @@ gui(m)
 list_all<-list(Obvs_gr_1, Obvs_gr_2, Obvs_gr_3, Obvs_gr_4, Obvs_gr_5, Obvs_gr_6, Obvs_gr_7, Obvs_gr_8, Obvs_gr_9)
 
 spdf<- function(data) {
-  abundance<-data.frame(data$abundance)
+  abundance<-data.frame(abundance=round(data$abundance)) 
   lonlat<-data.frame(data$lon, data$lat )
   spdf_new<- SpatialPointsDataFrame(coords=lonlat, data=abundance, proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0") )
   spdf_new
@@ -419,7 +419,7 @@ plot(spdf_all[[1]])
 length(spdf_all)
 
 for (i in 1: length(spdf_all)){
- sdm_data<- sdmData(data.abundance~. , train= spdf_all[[i]], predictors = current_preds)
+ sdm_data<- sdmData(abundance~. , train= spdf_all[[i]], predictors = current_preds)
  assign(paste0('sdm_data_group_', i), sdm_data)
 }
 
@@ -428,7 +428,7 @@ for (i in 1: length(spdf_all)){
 sdm_data_list<-lapply(ls(pattern='sdm_data_group_'), get)
 
 for (i in 1:length(sdm_data_list)) {
-  m<-sdm(data.abundance~. , data= sdm_data_list[[i]], methods=c('glm', 'brt', 'rf'), 
+  m<-sdm(abundance~. , data= sdm_data_list[[i]], methods=c('glm', 'brt', 'rf'), 
             replication=c('boot'),n=3,  
             modelSettings=list(brt=list(distribution='poisson',n.minobsinnode =5,bag.fraction =1), glm=list(family='poisson')))   ##do evaluation separately 
   assign(paste0('m_gr', i), m)
@@ -439,15 +439,116 @@ for (i in 1:length(sdm_data_list)) {
 
 #loop to check rmse
 list_models<-lapply(ls(pattern="m_gr"),get)
+
 list_models[[1]]
 list_models[[2]]
-list_models[[3]]
+list_models[[3]]  #check ok
 
-#now do sdm
-m<-sdm(abundance~. , data=d, methods=c('glm', 'brt', 'rf'), 
-       replication=c('boot'),n=3,  
-       modelSettings=list(brt=list(distribution='poisson',n.minobsinnode =5,bag.fraction =1), glm=list(family='poisson')))   ##do evaluation separately 
 
-m@data@features.name
-m
+#rmse function
+
+rmse_all<- function (model, sdmdata) { 
+  w<- model@replicates$abundance[[1]]$test
+  dd<-as.data.frame(as.data.frame(sdmdata))
+  ddt<-dd[dd$rID %in% w ,]
+  obvs<-ddt$abundance
+  pr<-predict(model, ddt, run=1)
+  e1<- obvs - pr[,1]
+  e2<- obvs - pr[,2]
+  e3<- obvs - pr[,3]
+ rmse1<- sqrt(mean(e1^2,na.rm=T))
+ rmse2<-sqrt(mean(e2^2,na.rm=T))
+ rmse3<-sqrt(mean(e3^2,na.rm=T))
+ rmse_123<-c(rmse1, rmse2, rmse3)
+}
+
+group1_rmse<-rmse_all(list_models[[1]], sdm_data_list[[1]])
+group1_rmse
+
+rmse_list<- mapply(rmse_all, list_models, sdm_data_list)
+
+rmse_list[,1]  #columns are the rmse 
+rmse_list[] #can see all the results, row 1= glm, row2= brt, row 3= rf
+
+
+#ok now predict for all groups
+
+for (i in 1: length(list_models)){
+  meow_now<-predict(list_models[[i]], meow_pred, mean=T)
+  assign(paste0('predict_now_gr', i), meow_now)
+  print(i)
+}
+
+
+plot(predict_now_gr1, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+
+#.w <- which(predict_now_gr1[[1]][] > 200)
+#predict_now_gr1[[1]][.w] <- NA
+
+#predict future for all
+for ( i in 1:length(list_models)){
+  RCP85_2050p<-predict(list_models[[i]], RCP85_2050_meow, mean=T)
+  assign(paste0('predict_RCP85_gr', i), RCP85_2050p)
+  print(i)
+}
+
+
+plot(predict_RCP85_gr1, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+
+
+
+##ENSEMBLE MODEL for now 
+
+#create ensemble loop 
+for (i in 1: length(list_models)){
+  ens<-ensemble(list_models[[i]], newdata=meow_pred, setting=list(method='unweighted', id=c(4:9) ))  #ensemble for brt and rf
+  assign(paste0('ens_gr', i), ens)
+}
+
+#plot_ensemble ----
+plot(ens, main= '2000-2014 Ensemble')
+plot(japan_outline, add=TRUE)
+
+#future ensemble 
+
+#ENSEMBLE MODEL FOR FUTURE
+for (i in 1:length(list_models)){
+ ensF<-ensemble(list_models[[i]], newdata=RCP85_2050_meow, setting=list(method='unweighted', id=c(4:9))) 
+ assign(paste0('ensF_gr', i), ensF)
+}
+
+#get the difference between them 
+dif<-function (ens_future, ens_now){
+  ens_future-ens_now
+}
+
+diff1<-dif(ensF_list[[1]], ens_list[[1]])
+plot(diff1)
+
+
+ens_list<-lapply(ls(pattern="ens_gr"),get)
+ensF_list<-lapply(ls(pattern='ensF_gr'), get)
+
+# dif_all<-lapply(ensF_list, dif, ens_now=ens_list) doesn't work loop
+
+for ( i in 1:length(ens_list)){
+ diff<- dif(ensF_list[[i]], ens_list[[i]])
+ assign(paste0('dif_gr', i), diff)
+}
+
+dif_list<-lapply(ls(pattern='dif_gr'), get)
+
+par(mfrow=c(3,3))
+
+for ( i in 1:length(dif_list)){
+  plot(dif_list[[i]], main= i )
+  plot(japan_outline, add=TRUE)
+  
+}
+plot(ensF, main="RCP8.5 2050 Ensemble")
+plot(japan_outline, add=TRUE)
+points(group1, col='red')
+
+
+
 
