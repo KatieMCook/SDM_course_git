@@ -1,5 +1,5 @@
 #SDM Practise##
-
+jan
 
 library(sdmpredictors)
 library(dismo)
