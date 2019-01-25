@@ -1,5 +1,5 @@
 #SDM Practise##
-setwd("~/PhD/SDM_course_git")
+
 
 library(sdmpredictors)
 library(dismo)
@@ -270,7 +270,7 @@ m1
 #gnb <- glm.nb(abundance~.,data=dd[,-1])
 
 #extract the columns that are used in bootstapping for model 1  (test points)
-w <- m@replicates$abundance[[1]]$test
+w <- m1@replicates$abundance[[1]]$test
 
 
 dd <- as.data.frame(d)
@@ -279,7 +279,7 @@ ddt <- dd[dd$rID %in% w ,]
 obs <- ddt$abundance
 
 #get the predicted value for the test points (first bootstrapping)
-pr <- predict(m,ddt,run=1)
+pr <- predict(m1,ddt,run=1)
 
 rmse <- function(o,p) {
   e <- o - p
@@ -292,15 +292,18 @@ rmse(obs,pr[,2] )
 rmse(obs,pr[,3] )
 
 #predict and plot 
-predict_current<-predict(m, current_preds, filename='predict_current_group1.img', mean= T, overwrite=TRUE) #mean=T the mean of the predictions for each algorithm
-#.w <- which(predict_current[[1]][] > 200)
-#predict_current[[1]][.w] <- NA
-#par(mfrow=c(2,2))
+predict_current<-predict(m1, current_preds, filename='predict_current_group1.img', mean= T, overwrite=TRUE) #mean=T the mean of the predictions for each algorithm
+
+
+#only plot areas with less than 200
+.w <- which(predict_current[[1]][] > 200)
+predict_current[[1]][.w] <- NA
+par(mfrow=c(2,2))
 
 plot(predict_current)
 
 #looks weird so use MEOW?
-meow<-readOGR('meow/MEOW/meow_ecos.shp')
+meow<-readOGR('MEOW/meow_ecos.shp')
 
 #plot
 par(mfrow=c(1,1))
@@ -347,11 +350,17 @@ plot(current_preds, main=c('SST', 'Current Velocity', 'Salinity', 'Chlorophyll')
 
 
 
-meow_now<-predict(m, meow_pred, filename='predict_current_group1.img', mean= T, overwrite=TRUE) #mean=T the mean of the predictions for each algorithm
+meow_now<-predict(m1, meow_pred, filename='predict_current_group1.img', mean= T, overwrite=TRUE) #mean=T the mean of the predictions for each algorithm
 
 
 plot(meow_now, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
 
+#glm still wierd limit it by 200
+.w <- which(meow_now[[1]][] > 200)
+meow_now[[1]][.w] <- NA
+par(mfrow=c(2,2))
+
+plot(meow_now, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
 
 
 #for future RCP 85  2050
@@ -359,7 +368,7 @@ RCP85_2050_meow<-mask(RCP85_2050, dissolve)
 
 names(RCP85_2050_meow)<-names(current_preds)
 
-RCP85_2050p<-predict(m, RCP85_2050_meow, filename='predict_future_group1.img', mean=T, overwrite=TRUE)
+RCP85_2050p<-predict(m1, RCP85_2050_meow, filename='predict_future_group1.img', mean=T, overwrite=TRUE)
 
 
 
@@ -367,9 +376,9 @@ plot(RCP85_2050p, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
 plot(j)
 
 
-m
+m1
 ##ENSEMBLE MODEL for now 
-ens<-ensemble(m, newdata=meow_pred, setting=list(method='unweighted', id=c(4:9) ))
+ens<-ensemble(m1, newdata=meow_pred, setting=list(method='unweighted', id=c(4:9) ))
 
 par(mfrow=c(1,1))
 plot(meow_now)
@@ -383,7 +392,7 @@ plot(japan_outline, add=TRUE)
 
 
 #ENSEMBLE MODEL FOR FUTURE
-ensF<-ensemble(m, newdata=RCP85_2050_meow, setting=list(method='unweighted', id=c(4:9)))
+ensF<-ensemble(m1, newdata=RCP85_2050_meow, setting=list(method='unweighted', id=c(4:9)))
 
 plot(ensF, main="RCP8.5 2050 Ensemble")
 plot(japan_outline, add=TRUE)
@@ -470,7 +479,7 @@ rmse_list<- mapply(rmse_all, list_models, sdm_data_list)
 rmse_list[,1]  #columns are the rmse 
 rmse_list[] #can see all the results, row 1= glm, row2= brt, row 3= rf
 
-
+Scuba Leeds
 #ok now predict for all groups
 
 for (i in 1: length(list_models)){
@@ -495,7 +504,7 @@ for ( i in 1:length(list_models)){
 
 plot(predict_RCP85_gr1, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
 
-
+plot(predict_RCP85_gr1, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
 
 ##ENSEMBLE MODEL for now 
 
@@ -506,7 +515,7 @@ for (i in 1: length(list_models)){
 }
 
 #plot_ensemble ----
-plot(ens, main= '2000-2014 Ensemble')
+plot(ens_gr1, main= '2000-2014 Ensemble')
 plot(japan_outline, add=TRUE)
 
 #future ensemble 
@@ -522,12 +531,14 @@ dif<-function (ens_future, ens_now){
   ens_future-ens_now
 }
 
+ens_list<-lapply(ls(pattern="ens_gr"),get)
+ensF_list<-lapply(ls(pattern='ensF_gr'), get)
+
 diff1<-dif(ensF_list[[1]], ens_list[[1]])
 plot(diff1)
 
 
-ens_list<-lapply(ls(pattern="ens_gr"),get)
-ensF_list<-lapply(ls(pattern='ensF_gr'), get)
+
 
 # dif_all<-lapply(ensF_list, dif, ens_now=ens_list) doesn't work loop
 
@@ -545,6 +556,8 @@ for ( i in 1:length(dif_list)){
   plot(japan_outline, add=TRUE)
   
 }
+
+
 plot(ensF, main="RCP8.5 2050 Ensemble")
 plot(japan_outline, add=TRUE)
 points(group1, col='red')
