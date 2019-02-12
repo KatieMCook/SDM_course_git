@@ -18,6 +18,8 @@ library(RStoolbox)
 library(sdm)
 library(ggmap)
 
+setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
+
 #read in Japan if starting ###### START HERE 
 japan_outline<-readOGR('plotting/japan_outline.shp')
 
