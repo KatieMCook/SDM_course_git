@@ -17,6 +17,7 @@ library(usdm)
 library(RStoolbox)
 library(sdm)
 library(ggmap)
+library(ggplot2)
 
 setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
 
@@ -102,11 +103,15 @@ res(bathy2)
 
 bathy2_jpn<-crop(bathy2, geographic.extent)
 
+my.colors = colorRampPalette(c("#5E85B8","#EDF0C0","#C13127")) 
+
+plot(bathy2_jpn, col=my.colors(1000) )
+
 bathy_shallow2<-bathy2_jpn
 
 bathy_shallow2[bathy_shallow2 < -100]<-NA
 
-my.colors = colorRampPalette(c("#5E85B8","#EDF0C0","#C13127")) 
+
 plot(bathy_shallow2, col=my.colors(1000))   #bathy_shallow2 = better 
 
 
@@ -200,7 +205,28 @@ names(fgroup_site)
 
 names(fgroup_site)<-c( "Site"  ,    "group"  ,   "abundance" , "lat"    ,    "lon" )
 
-#plot to check
+### PLOTS FOR PRESENTATION
+#make group a factor
+fgroup_site$group<-as.factor(fgroup_site$group)
+
+#plot functional groups by lat and lon (by abundance)
+ggplot(fgroup_site, aes(x=lat, y=abundance, col=group))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Proportion of Community', y='Latitude')+
+  geom
+
+#plot by proportion
+fgroup_site_prop<- fgroup_site %>% group_by(Site, lat, lon) %>% mutate(total_abun= sum(abundance)) %>% mutate(prop= abundance/total_abun)
+
+ggplot(fgroup_site_prop, aes(x=lat, y=prop, col=group))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Proportion of Community', y='Latitude')+
+  theme_light()+
+  ylim(0,0.7)
+
+#plot to check MAP
 # Plot the base map
 plot(japan_outline, 
      xlim = c(min.lon, max.lon),
@@ -264,7 +290,7 @@ m1<-sdm(abundance~. , data=d, methods=c('glm', 'brt', 'rf'),
        replication=c('boot'),n=3,  
        modelSettings=list(brt=list(distribution='poisson',n.minobsinnode =5,bag.fraction =1), glm=list(family='poisson')))   ##do evaluation separately 
 
-m@data@features.name
+m1@data@features.name
 m1
 
 
@@ -341,7 +367,7 @@ plot(meow_pred[[1]])
 
 plot(japan_outline, add=TRUE)
 
-points(group1)
+points(group1, col='red')
 
 crs(japan_outline)
 crs(meow_pred)
@@ -375,7 +401,6 @@ RCP85_2050p<-predict(m1, RCP85_2050_meow, filename='predict_future_group1.img', 
 
 
 plot(RCP85_2050p, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
-plot(j)
 
 
 m1
@@ -401,9 +426,24 @@ plot(japan_outline, add=TRUE)
 points(group1, col='red')
 
 
+#plot by two panel
+par(mfrow=c(1,2))
 
+plot(ens, main= '2000-2014 Ensemble')
+plot(japan_outline, add=TRUE)
 
+plot(ensF, main="RCP8.5 2050 Ensemble")
+plot(japan_outline, add=TRUE)
 
+png(file = 'plotting/group1.jpeg')
+par(mfrow=c(1,2))
+
+plot(ens, main= '2000-2014 Ensemble')
+plot(japan_outline, add=TRUE)
+
+plot(ensF, main="RCP8.5 2050 Ensemble")
+plot(japan_outline, add=TRUE)
+dev.off()
 
 
 
@@ -481,7 +521,6 @@ rmse_list<- mapply(rmse_all, list_models, sdm_data_list)
 rmse_list[,1]  #columns are the rmse 
 rmse_list[] #can see all the results, row 1= glm, row2= brt, row 3= rf
 
-Scuba Leeds
 #ok now predict for all groups
 
 for (i in 1: length(list_models)){
