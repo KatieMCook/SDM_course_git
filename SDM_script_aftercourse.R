@@ -435,7 +435,11 @@ plot(japan_outline, add=TRUE)
 plot(ensF, main="RCP8.5 2050 Ensemble")
 plot(japan_outline, add=TRUE)
 
-png(file = 'plotting/group1.jpeg')
+
+
+
+#saves the file directly to directory
+png(file = 'plotting/group1.png')
 par(mfrow=c(1,2))
 
 plot(ens, main= '2000-2014 Ensemble')
@@ -445,6 +449,19 @@ plot(ensF, main="RCP8.5 2050 Ensemble")
 plot(japan_outline, add=TRUE)
 dev.off()
 
+## NMDS of traits and sites
+library(vegan)
+library(reshape2)
+
+#make matrix of trait abundances by site
+group_site_matrix<- acast(fgroup_site, Site~group, value.var = 'abundance')
+
+ord<-metaMDS(group_site_matrix)
+par(mfrow=c(1,1))
+
+plot(ord, type='n')
+orditorp(ord, disp='sites', col='red', pch=21, bg='yellow')
+orditorp(ord, disp='species', col='black')
 
 
 ###### write a loop/ functions for all groups#########
