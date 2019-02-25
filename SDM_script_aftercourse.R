@@ -72,8 +72,8 @@ plot(chlo)
 
 current_preds<-stack(current_preds, chlo)
 
-plot(current_preds)
-
+plot(current_preds, main=c('SST', 'Current Velocity', 'Salinity', 'Chlorophyll'), mai = c(1, 0.1, 0.1, 0.1))
+plot(japan_outline, add=TRUE)
 
 
 #extract future 
@@ -213,8 +213,7 @@ fgroup_site$group<-as.factor(fgroup_site$group)
 ggplot(fgroup_site, aes(x=lat, y=abundance, col=group))+
   geom_point()+
   geom_smooth(method='lm', se=FALSE)+
-  labs(x='Proportion of Community', y='Latitude')+
-  geom
+  labs(x='Latitude', y='Abundance')
 
 #plot by proportion
 fgroup_site_prop<- fgroup_site %>% group_by(Site, lat, lon) %>% mutate(total_abun= sum(abundance)) %>% mutate(prop= abundance/total_abun)
@@ -222,7 +221,7 @@ fgroup_site_prop<- fgroup_site %>% group_by(Site, lat, lon) %>% mutate(total_abu
 ggplot(fgroup_site_prop, aes(x=lat, y=prop, col=group))+
   geom_point()+
   geom_smooth(method='lm', se=FALSE)+
-  labs(x='Proportion of Community', y='Latitude')+
+  labs(x='Latitude', y='Proportion of Community')+
   theme_light()+
   ylim(0,0.7)
 
@@ -357,7 +356,62 @@ plot(dissolve)
 
 plot(japan_outline, add=TRUE)
 
+#plotting the ecoregion map
+#make transparent colours
+t_col <- function(color, percent = 50, name = NULL) {
+  #	  color = color name
+  #	percent = % transparency
+  #	   name = an optional name for the color
+  ## Get RGB values for named color
+  rgb.val <- col2rgb(color)
+  ## Make new color using input color as base and alpha set by transparency
+  t.col <- rgb(rgb.val[1], rgb.val[2], rgb.val[3],
+               max = 255,
+               alpha = (100-percent)*255/100,
+               names = name)
+  ## Save the color
+  invisible(t.col)
+  
+  
+}
+
+my.col<- t_col('cornflowerblue', percent = 50, name= 'transblue')
+## END
+
+
+plot(japan_outline, 
+     xlim = c(min.lon, max.lon),
+     ylim = c(min.lat, max.lat),
+     col = "grey95",
+     axes = TRUE
+)
+
+crs(japan_outline)
+# Add the points for individual observation
+plot(kuroshio.map, add=TRUE, col=my.col)
+
+points(x = fgroup_site$lon, 
+       y = fgroup_site$lat, 
+       col = "red", 
+       pch = 17,
+       cex=2)
+# And draw a little box around the graph
+box()
+
+
+
+
+plot(japan_outline)
+
+points(group1, col='red', pch=17 )
+box()
+
+
 #meow preds
+
+
+
+
 plot(current_preds[[1]])
 
 
