@@ -143,9 +143,11 @@ fish_survey$SpeciesFish[fish_survey$SpeciesFish=="Chaetodon modestus"]<-'Roa mod
 #ok now all names ok 
 
 #merge with functional groups
-fgroup<-read.csv('fish_groups.csv')
+fgroup<-read.csv('fish_groups_MM.csv')
 
-fgroup$X<-as.character(fgroup$X)
+fgroup$Species<-as.character(fgroup$Species)
+
+fgroup<-fgroup[,c(1,2)]
 
 names(fgroup)<-c('Species', 'group'  )
 
@@ -154,6 +156,19 @@ names(fish_survey)<-c("SiteID" ,     "Name"   ,     "Year"  ,      "Date"    ,  
 #merge
 func_group_all<-left_join(fish_survey, fgroup, by='Species')
 
+nasp<-which(is.na(func_group_all$group))
+unique(func_group_all[c(nasp),6]) #missing FGs
+
+which( !(fgroup$Species %in% unique(func_group_all$Species)))
+fgroup[184,]  #scarus psittacus/ spinus sp group 3
+
+func_group_all$group[func_group_all$Species == "Scarus spinus"]<-fgroup$group[fgroup$Species=='Scarus psittacus/spinus']
+func_group_all$group[func_group_all$Species == "Scarus psittacus"]<-fgroup$group[fgroup$Species=='Scarus psittacus/spinus']
+
+which(func_group_all$Species=="Ostracion immaculatus")
+which(func_group_all$Species=="Roa modesta")
+
+
 #remove unesessary columns and summarise by site, transect, species
 func_group_all<- func_group_all[, c(1,5,7,10)]
 
@@ -161,14 +176,16 @@ fgroup_site<-func_group_all %>% group_by(SiteID, group,Transect ) %>% summarise(
 
 fgroup_site<-fgroup_site %>% group_by(SiteID, group) %>% summarise(abundance=mean(abundance))
 
+#remove NAs 
+rmna<-which(is.na(fgroup_site$group))
+fgroup_site<-fgroup_site[-c(rmna),]
+
+
 ##rename cols
 names(fgroup_site)<- c('Site', 'group', 'abundance')
 
 fgroup_site$Site<-as.character(fgroup_site$Site)
 
-#remove na
-which(is.na(fgroup_site$group))
-fgroup_site<-fgroup_site[-223,]
 
 #add zeros (by making a matrix and making NA values 0 and converting back)
 site_group_matrix<-acast(fgroup_site, Site~group, value.var='abundance')
@@ -205,6 +222,7 @@ names(fgroup_site)
 
 names(fgroup_site)<-c( "Site"  ,    "group"  ,   "abundance" , "lat"    ,    "lon" )
 
+
 ### PLOTS FOR PRESENTATION
 #make group a factor
 fgroup_site$group<-as.factor(fgroup_site$group)
@@ -224,6 +242,86 @@ ggplot(fgroup_site_prop, aes(x=lat, y=prop, col=group))+
   labs(x='Latitude', y='Proportion of Community')+
   theme_light()+
   ylim(0,0.7)
+
+
+for (i in 1: length(unique(fgroup_site_prop$group))){
+ filter_group<-filter(fgroup_site_prop, group==i) 
+ assign(paste0 ('group_prop_lat_', i), filter_group)
+}
+
+ggplot(group_prop_lat_1, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 1')+
+  theme_light()+
+  ylim(0, 0.7)
+  
+
+ggplot(group_prop_lat_2, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 2')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_3, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 3')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_4, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 4')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_5, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 5')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_6, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 6')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_7, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 7')+
+  theme_light()+
+  ylim(0, 0.7)
+
+
+ggplot(group_prop_lat_8, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 8')+
+  theme_light()+
+  ylim(0, 0.7)
+
+
+ggplot(group_prop_lat_9, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 9')+
+  theme_light()+
+  ylim(0, 0.7)
+
+
+for (i in 1: length(spdf_all)){
+  sdm_data<- sdmData(abundance~. , train= spdf_all[[i]], predictors = current_preds)
+  assign(paste0('sdm_data_group_', i), sdm_data)
+}
+
+
 
 #plot to check MAP
 # Plot the base map
@@ -459,23 +557,26 @@ plot(RCP85_2050p, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
 
 m1
 ##ENSEMBLE MODEL for now 
-ens<-ensemble(m1, newdata=meow_pred, setting=list(method='unweighted', id=c(4:9) ))
+ens<-ensemble(m1, newdata=meow_pred, setting=list(method='unweighted', id=c(1:9) )) #changed the ID from 4:9? (3 models in each)
 
 par(mfrow=c(1,1))
 plot(meow_now)
 
 
-#plot_ensemble ----
+#plot_ensemble ---- 
+w.<-which(ens[]>200)
+ens[w.]<-NA
+ens
+
 plot(ens, main= '2000-2014 Ensemble')
 plot(japan_outline, add=TRUE)
-
-
 
 
 #ENSEMBLE MODEL FOR FUTURE
 ensF<-ensemble(m1, newdata=RCP85_2050_meow, setting=list(method='unweighted', id=c(4:9)))
 
 plot(ensF, main="RCP8.5 2050 Ensemble")
+
 plot(japan_outline, add=TRUE)
 points(group1, col='red')
 
@@ -522,7 +623,7 @@ orditorp(ord, disp='species', col='black')
 
 #now with group one create SPDF
 #list<-c(paste0('Obvs_gr_', 1:length(unique(fgroup_site$group))))
-list_all<-list(Obvs_gr_1, Obvs_gr_2, Obvs_gr_3, Obvs_gr_4, Obvs_gr_5, Obvs_gr_6, Obvs_gr_7, Obvs_gr_8, Obvs_gr_9)
+list_all<-list(Obvs_gr_1, Obvs_gr_2, Obvs_gr_3, Obvs_gr_4, Obvs_gr_5, Obvs_gr_6, Obvs_gr_7, Obvs_gr_8, Obvs_gr_9, Obvs_gr_10)
 
 spdf<- function(data) {
   abundance<-data.frame(abundance=round(data$abundance)) 
@@ -590,8 +691,8 @@ group1_rmse
 rmse_list<- mapply(rmse_all, list_models, sdm_data_list)
 
 rmse_list[,1]  #columns are the rmse 
-rmse_list[] #can see all the results, row 1= glm, row2= brt, row 3= rf
-
+rmse_list[,2] #can see all the results, row 1= glm, row2= brt, row 3= rf
+rmse_list[,c(1:10)]
 #ok now predict for all groups
 
 for (i in 1: length(list_models)){
@@ -602,7 +703,9 @@ for (i in 1: length(list_models)){
 
 
 plot(predict_now_gr1, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
-
+plot(predict_now_gr2, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+plot(predict_now_gr3, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+plot(predict_now_gr4, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
 #.w <- which(predict_now_gr1[[1]][] > 200)
 #predict_now_gr1[[1]][.w] <- NA
 
@@ -627,6 +730,7 @@ for (i in 1: length(list_models)){
 }
 
 #plot_ensemble ----
+par(mfrow=c(1,1))
 plot(ens_gr1, main= '2000-2014 Ensemble')
 plot(japan_outline, add=TRUE)
 
@@ -663,6 +767,11 @@ dif_list<-lapply(ls(pattern='dif_gr'), get)
 
 par(mfrow=c(3,3))
 
+#remove group 4 (only one observation)
+dif_list[[4]]<-NULL
+
+par(mfrow=c(3,3))
+
 for ( i in 1:length(dif_list)){
   plot(dif_list[[i]], main= i )
   plot(japan_outline, add=TRUE)
@@ -674,6 +783,41 @@ plot(ensF, main="RCP8.5 2050 Ensemble")
 plot(japan_outline, add=TRUE)
 points(group1, col='red')
 
+#1,5,6,7
 
+par(mfrow=c(1,4))
+
+plot(dif_list[[1]], main= 1 )
+plot(japan_outline, add=TRUE)
+
+plot(dif_list[[5]], main= 5 )
+plot(japan_outline, add=TRUE)
+
+plot(dif_list[[6]], main= 6 )
+plot(japan_outline, add=TRUE)
+
+plot(dif_list[[7]], main= 7)
+plot(japan_outline, add=TRUE)
+
+par(mfrow=c(1,3))
+plot(dif_list[[2]], main= 2 )
+plot(japan_outline, add=TRUE)
+
+plot(dif_list[[3]], main= 3 )
+plot(japan_outline, add=TRUE)
+
+plot(dif_list[[8]], main= 8 )
+plot(japan_outline, add=TRUE)
+
+
+par(mfrow=c(1,2))
+plot(dif_list[[4]], main= 4 )
+plot(japan_outline, add=TRUE)
+
+plot(dif_list[[9]], main= 9 )
+plot(japan_outline, add=TRUE)
+
+
+###test with GBIF? ----
 
 
