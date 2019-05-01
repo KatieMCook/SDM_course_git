@@ -153,6 +153,12 @@ names(fgroup)<-c('Species', 'group'  )
 
 names(fish_survey)<-c("SiteID" ,     "Name"   ,     "Year"  ,      "Date"    ,    "Transect"   , "Species", "Number" ,     "SizeCm"  ,    "B_g" ) 
 
+fgroup<-fgroup[-c(which(fgroup$group==4)),]
+
+fgroup$group[fgroup$group==10]<-4  ##only one in group 4, remove and make 10s 4
+
+which(fgroup$group==4)
+
 #merge
 func_group_all<-left_join(fish_survey, fgroup, by='Species')
 
@@ -168,6 +174,8 @@ func_group_all$group[func_group_all$Species == "Scarus psittacus"]<-fgroup$group
 which(func_group_all$Species=="Ostracion immaculatus")
 which(func_group_all$Species=="Roa modesta")
 
+torm<-which(is.na(func_group_all$group))
+func_group_all<-func_group_all[-c(torm),]
 
 #remove unesessary columns and summarise by site, transect, species
 func_group_all<- func_group_all[, c(1,5,7,10)]
@@ -176,9 +184,6 @@ fgroup_site<-func_group_all %>% group_by(SiteID, group,Transect ) %>% summarise(
 
 fgroup_site<-fgroup_site %>% group_by(SiteID, group) %>% summarise(abundance=mean(abundance))
 
-#remove NAs 
-rmna<-which(is.na(fgroup_site$group))
-fgroup_site<-fgroup_site[-c(rmna),]
 
 
 ##rename cols
@@ -322,7 +327,7 @@ for (i in 1: length(spdf_all)){
 }
 
 
-
+par(mfrow=c(1,1))
 #plot to check MAP
 # Plot the base map
 plot(japan_outline, 
@@ -349,6 +354,7 @@ box()
 #fgroup_site<-fgroup_site[-223,]
 
 
+
 #split data by functional group 
 for (i in 1:length(unique(fgroup_site$group))){
   rows<-which(fgroup_site$group==i)
@@ -373,12 +379,13 @@ group1<- SpatialPointsDataFrame(coords=latlon, data=abundance,
 pairs(current_preds) # not great but ok
 
 v1<-vifstep(current_preds, th=10) #nothing got rid of
-
+v1
 
 #now make sdmData
 d<-sdmData(abundance~. , train= group1 , predictors =current_preds)
 d@errorLog
 group1@data  #check the mask 
+
 #now run sdm 
 
 
@@ -411,10 +418,18 @@ rmse <- function(o,p) {
   sqrt(mean(e^2,na.rm=T))
 }
 
-#get the root mean square error for model 3
+#get the root mean square error for model 1,2,3
 rmse(obs,pr[,1] )
 rmse(obs,pr[,2] )
 rmse(obs,pr[,3] )
+
+#normalised RMSE
+rangeobs<-max(obs)-min(obs)
+
+nrmse1<-rmse(obs,pr[,1] )/rangeobs
+nrmse2<-rmse(obs,pr[,2] )/rangeobs
+nrmse3<-rmse(obs,pr[,3] )/rangeobs
+
 
 #predict and plot 
 predict_current<-predict(m1, current_preds, filename='predict_current_group1.img', mean= T, overwrite=TRUE) #mean=T the mean of the predictions for each algorithm
@@ -475,6 +490,8 @@ t_col <- function(color, percent = 50, name = NULL) {
 
 my.col<- t_col('cornflowerblue', percent = 50, name= 'transblue')
 ## END
+
+
 
 
 plot(japan_outline, 
@@ -551,13 +568,13 @@ names(RCP85_2050_meow)<-names(current_preds)
 RCP85_2050p<-predict(m1, RCP85_2050_meow, filename='predict_future_group1.img', mean=T, overwrite=TRUE)
 
 
-
-plot(RCP85_2050p, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+plot(RCP85_2050p, main=c('GLM', 'Boosted Regression Tree', 'Random Forest')) #glm overpredicts, dont use
 
 
 m1
 ##ENSEMBLE MODEL for now 
-ens<-ensemble(m1, newdata=meow_pred, setting=list(method='unweighted', id=c(1:9) )) #changed the ID from 4:9? (3 models in each)
+ens<-ensemble(m1, newdata=meow_pred, setting=list(method='unweighted', id=c(4:9) )) #changed the ID from 4:9? (3 models in each)
+plot(ens)
 
 par(mfrow=c(1,1))
 plot(meow_now)
@@ -623,7 +640,7 @@ orditorp(ord, disp='species', col='black')
 
 #now with group one create SPDF
 #list<-c(paste0('Obvs_gr_', 1:length(unique(fgroup_site$group))))
-list_all<-list(Obvs_gr_1, Obvs_gr_2, Obvs_gr_3, Obvs_gr_4, Obvs_gr_5, Obvs_gr_6, Obvs_gr_7, Obvs_gr_8, Obvs_gr_9, Obvs_gr_10)
+list_all<-list(Obvs_gr_1, Obvs_gr_2, Obvs_gr_3, Obvs_gr_4, Obvs_gr_5, Obvs_gr_6, Obvs_gr_7, Obvs_gr_8, Obvs_gr_9)
 
 spdf<- function(data) {
   abundance<-data.frame(abundance=round(data$abundance)) 
@@ -666,7 +683,13 @@ list_models<-lapply(ls(pattern="m_gr"),get)
 list_models[[1]]
 list_models[[2]]
 list_models[[3]]  #check ok
-
+list_models[[4]]
+list_models[[5]]
+list_models[[6]]
+list_models[[7]]
+list_models[[8]]
+list_models[[9]]
+list_models[[10]] 
 
 #rmse function
 
@@ -682,7 +705,12 @@ rmse_all<- function (model, sdmdata) {
  rmse1<- sqrt(mean(e1^2,na.rm=T))
  rmse2<-sqrt(mean(e2^2,na.rm=T))
  rmse3<-sqrt(mean(e3^2,na.rm=T))
- rmse_123<-c(rmse1, rmse2, rmse3)
+
+ nrmse1<-rmse1/(max(obs)-min(obs))
+ nrmse2<-rmse2/(max(obs)-min(obs))
+ nrmse3<-rmse3/(max(obs)-min(obs))
+ nrmse_123<-c(nrmse1, nrmse2, nrmse3)
+ #rmse_123<-c(rmse1, rmse2, rmse3) #if you want true rmse not normalised then unhash this 
 }
 
 group1_rmse<-rmse_all(list_models[[1]], sdm_data_list[[1]])
@@ -692,7 +720,19 @@ rmse_list<- mapply(rmse_all, list_models, sdm_data_list)
 
 rmse_list[,1]  #columns are the rmse 
 rmse_list[,2] #can see all the results, row 1= glm, row2= brt, row 3= rf
-rmse_list[,c(1:10)]
+
+rmse_list[]
+rmse_listdf<-as.data.frame(rmse_list)
+colnames(rmse_listdf)<-c(1:9)
+rownames(rmse_listdf)<-c('GLM', 'BRT', 'RF')
+nrmsedf<-rmse_listdf
+
+write.csv(nrmsedf, 'normalisedRMSE.csv')
+
+#get normalised rmse
+
+
+
 #ok now predict for all groups
 
 for (i in 1: length(list_models)){
@@ -702,10 +742,7 @@ for (i in 1: length(list_models)){
 }
 
 
-plot(predict_now_gr1, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
-plot(predict_now_gr2, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
-plot(predict_now_gr3, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
-plot(predict_now_gr4, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+
 #.w <- which(predict_now_gr1[[1]][] > 200)
 #predict_now_gr1[[1]][.w] <- NA
 
@@ -719,7 +756,11 @@ for ( i in 1:length(list_models)){
 
 plot(predict_RCP85_gr1, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
 
-plot(predict_RCP85_gr1, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+plot(predict_RCP85_gr2, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+
+plot(predict_RCP85_gr3, main=c('GLM', 'Boosted Regression Tree', 'Random Forest'))
+
+#glm overplotting 
 
 ##ENSEMBLE MODEL for now 
 
@@ -732,6 +773,8 @@ for (i in 1: length(list_models)){
 #plot_ensemble ----
 par(mfrow=c(1,1))
 plot(ens_gr1, main= '2000-2014 Ensemble')
+plot(ens_gr2, main= '2000-2014 Ensemble')
+
 plot(japan_outline, add=TRUE)
 
 #future ensemble 
@@ -742,12 +785,13 @@ for (i in 1:length(list_models)){
  assign(paste0('ensF_gr', i), ensF)
 }
 
+ens_list<-lapply(ls(pattern="ens_gr"),get)
 #get the difference between them 
+
 dif<-function (ens_future, ens_now){
   ens_future-ens_now
 }
 
-ens_list<-lapply(ls(pattern="ens_gr"),get)
 ensF_list<-lapply(ls(pattern='ensF_gr'), get)
 
 diff1<-dif(ensF_list[[1]], ens_list[[1]])
@@ -765,10 +809,11 @@ for ( i in 1:length(ens_list)){
 
 dif_list<-lapply(ls(pattern='dif_gr'), get)
 
+
 par(mfrow=c(3,3))
 
 #remove group 4 (only one observation)
-dif_list[[4]]<-NULL
+
 
 par(mfrow=c(3,3))
 
@@ -779,10 +824,42 @@ for ( i in 1:length(dif_list)){
 }
 
 
+par(mfrow=c(3,3))
+for ( i in 1:length(ens_list)){
+  plot(ens_list[[i]], main= i )
+  plot(japan_outline, add=TRUE)
+  
+}
+
+
+for ( i in 1:length(ensF_list)){
+  plot(ensF_list[[i]], main= i )
+  plot(japan_outline, add=TRUE)
+  
+}
+
 plot(ensF, main="RCP8.5 2050 Ensemble")
 plot(japan_outline, add=TRUE)
 points(group1, col='red')
 
+##for poster plot an example of each
+par(mfrow=c(2,2),  mai = c(0.3,0.2,0.2,0.2))
+
+plot(dif_list[[1]],xaxt='n', ann=FALSE  )
+plot(japan_outline, add=TRUE)
+title(main='Group 1')
+
+plot(dif_list[[2]], xaxt='n', ann=FALSE )
+plot(japan_outline, add=TRUE)
+title(main= 'Group 2')
+
+plot(dif_list[[5]] )
+plot(japan_outline, add=TRUE)
+title(main='Group 5')
+
+plot(dif_list[[6]] )
+plot(japan_outline, add=TRUE)
+title(main='Group 6')
 #1,5,6,7
 
 par(mfrow=c(1,4))
@@ -819,5 +896,153 @@ plot(japan_outline, add=TRUE)
 
 
 ###test with GBIF? ----
+jp_species<- data.frame(species=unique(fish_survey$Species))
+jp_species
+
+#split in sp genus
+jp_species$species<-as.character(jp_species$species)
+jp_split<-strsplit(jp_species$species, '\\s+' )
+
+jp_split<-as.data.frame(jp_split)
+jp_split<-as.matrix(jp_split)
+
+jp_split<-t(jp_split)
+jp_split<-as.data.frame(jp_split)
+names(jp_split)<-c('genus','species')
+
+names(jp_species)<-'Sciname'
+
+jp_species$genus<-jp_split$genus
+jp_species$species<-jp_split$species
+
+jp_species$genus<-as.character(jp_species$genus)
+jp_species$species<-as.character(jp_species$species)
+
+#get gbif data
+species1<-gbif(genus=jp_species[1,2], species=jp_species[1,3])
+
+install.packages('rgbif')
+library(rgbif)
+
+species1<-occ_search(scientificName = jp_species[1,1], return= 'data', geometry=c(123,23,141,36))
+species1<-st_as_sf(species1, coords=c("decimalLongitude", "decimalLatitude" ), crs=4326)
+
+par(mfrow=c(1,1))
+plot(species1$geometry)
+plot(japan_outline, add=TRUE)
+
+#loop to get all gbif data for all species 
+
+for (i in 1:nrow(jp_species)){
+  data<-occ_search(scientificName = jp_species[i,1], return= 'data', geometry=c(123,23,141,36))
+  assign(paste0("gbifsp_", i), data)
+  print(i)
+  
+}
+    
+  
+#remove those with no data
+rm(gbifsp_113, gbifsp_122, gbifsp_150, gbifsp_192,gbifsp_218, gbifsp_236, gbifsp_255,gbifsp_262, gbifsp_277,gbifsp_288,gbifsp_309,gbifsp_321,
+   gbifsp_342, gbifsp_349, gbifsp_352,gbifsp_354,gbifsp_357,gbifsp_365,gbifsp_370,gbifsp_371,gbifsp_380, gbifsp_382,gbifsp_385,gbifsp_389,gbifsp_390,gbifsp_60, gbifsp_85,
+   gbifsp_94)
+rm(gbifsp_339, gbifsp_341,gbifsp_343,gbifsp_392)
+
+#list all the others
+
+gbif_list<-lapply(ls(pattern='gbifsp_'),get)
+  
+selectcols<-function(data){
+ selected<- select(data, scientificName,decimalLatitude,decimalLongitude, species)
+ return(selected)
+}
+
+gbif_sp1test<-selectcols(gbifsp_1)
+
+#get the relevant column
+gbif_list_f<-lapply(gbif_list, selectcols)
+
+gbif_comb<-do.call('rbind', gbif_list_f)
 
 
+#now merge with fish group data
+fgroup
+
+names(fgroup)<-c('species', 'group')
+
+gbif_group<-left_join(gbif_comb, fgroup, by='species')
+
+nasp<-which(is.na(gbif_group$group))
+
+gbif_group$species[nasp]
+
+#change the na species
+which(fgroup$species=='Cantherhines pardalis') #same as ostraction
+fgroup[266,]
+
+gbif_group$group[gbif_group$species=='Ostracion immaculatus']<-5
+
+which(fgroup$species=='Scarus psittacus/spinus')
+fgroup[184,]  #group3
+
+gbif_group$group[gbif_group$species=="Scarus psittacus"]<-3
+gbif_group$group[gbif_group$species=="Scarus spinus"]<-3
+
+
+nasp<-which(is.na(gbif_group$group))
+
+gbif_group$species[nasp]  #just remove them
+gbif_group<-gbif_group[-c(nasp),]
+
+
+write.csv(gbif_group, 'gbif_group.csv')
+
+#summarise by group
+names(gbif_group)
+gbif_group$obs<-1
+gbif_group<-gbif_group %>% group_by( decimalLatitude,  decimalLongitude, group  ) %>% summarise(abundance=sum(obs))
+
+
+#ok so have group observation by latitude for each group
+#split for the groups so unique df df for group
+
+gbif_group$group<-as.factor(gbif_group$group)
+
+
+#plot functional groups by lat and lon (by abundance) some patterns? are they the same 
+ggplot(gbif_group, aes(x=decimalLatitude, y=log(abundance), col=group))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Abundance')
+
+
+#split data by functional group 
+for (i in 1:length(unique(gbif_group$group))){
+  rows<-which(gbif_group$group==i)
+  assign(paste0("gbif_gr_", i), data.frame(gbif_group[rows,]))
+}
+
+plot(gbif_gr_1$abundance~gbif_gr_1$decimalLatitude)
+#now we can use these to check models?
+#model of predicted vs observed
+#so extract values from ensemble model at the lat lon of gbif and regression
+
+latlon1<-data.frame(lon=gbif_gr_1$decimalLongitude, lat=gbif_gr_1$decimalLatitude)
+View(latlon1)
+
+extract_gr1<-extract(ens_gr1, latlon1)
+gbif_gr_1$ens<-extract_gr1
+
+View(gbif_gr_1)
+
+gbif_gr_1<-na.omit(gbif_gr_1)
+
+ggplot(gbif_gr_1, aes(y=(abundance), x=ens))+
+  geom_point()+
+  geom_smooth(method='lm')
+
+cor(gbif_gr_1$abundance, gbif_gr_1$ens)
+
+
+#generate pseudo absences
+#split abundance data into presence absense
+#plot?
