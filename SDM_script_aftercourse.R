@@ -18,6 +18,7 @@ library(RStoolbox)
 library(sdm)
 library(ggmap)
 library(ggplot2)
+library(raster)
 
 setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
 
@@ -391,7 +392,7 @@ group1@data  #check the mask
 
 #now do sdm
 m1<-sdm(abundance~. , data=d, methods=c('glm', 'brt', 'rf'), 
-       replication=c('boot'),n=3,  
+       replication=c('boot'),n=5, test.p=10 ,
        modelSettings=list(brt=list(distribution='poisson',n.minobsinnode =5,bag.fraction =1), glm=list(family='poisson')))   ##do evaluation separately 
 
 m1@data@features.name
@@ -402,6 +403,9 @@ m1
 #gnb <- glm.nb(abundance~.,data=dd[,-1])
 
 #extract the columns that are used in bootstapping for model 1  (test points)
+
+
+
 w <- m1@replicates$abundance[[1]]$test
 
 
@@ -418,10 +422,11 @@ rmse <- function(o,p) {
   sqrt(mean(e^2,na.rm=T))
 }
 
+
 #get the root mean square error for model 1,2,3
-rmse(obs,pr[,1] )
-rmse(obs,pr[,2] )
-rmse(obs,pr[,3] )
+rmse1<-rmse(obs,pr[,1] )
+rmse2<-rmse(obs,pr[,2] )
+rmse3<-rmse(obs,pr[,3] )
 
 #normalised RMSE
 rangeobs<-max(obs)-min(obs)
@@ -429,6 +434,66 @@ rangeobs<-max(obs)-min(obs)
 nrmse1<-rmse(obs,pr[,1] )/rangeobs
 nrmse2<-rmse(obs,pr[,2] )/rangeobs
 nrmse3<-rmse(obs,pr[,3] )/rangeobs
+
+#get the rmse for training points?
+w1<-m1@replicates$abundance[[1]]$train
+
+dds<-dd[dd$rID %in% w1 ,]
+obs<-dds$abundance
+
+pr<-predict(m1, dds, run=1)
+
+trainrmse1<-rmse(obs, pr[,1])
+trainrmse2<-rmse(obs, pr[,2])
+trainrmse3<-rmse(obs, pr[,3])
+
+#test
+rmse_df<-data.frame(rep=1,test_train='train', glm=1, brt=1, rf=1 )
+rmse_df$test_train<-as.character(rmse_df$test_train)
+
+for (i in 1:5){
+  w <- m1@replicates$abundance[[i]]$test
+  
+  dd <- as.data.frame(d)
+  #get the real values for the test points
+  ddt <- dd[dd$rID %in% w ,]
+  obs <- ddt$abundance
+  
+  #get the predicted value for the test points (first bootstrapping)
+  pr <- predict(m1,ddt,run=1)
+  
+  #get the root mean square error for model 1,2,3
+  rmse_df[i,3]<-rmse(obs,pr[,1] )
+  rmse_df[i,4]<-rmse(obs,pr[,2] )
+  rmse_df[i,5]<-rmse(obs,pr[,3] )
+  
+  rmse_df[i, 1]<-i
+  rmse_df[i,2]<-'test'
+  
+}
+
+
+#train
+for (i in 1:3){
+  w <- m1@replicates$abundance[[i]]$train
+  
+  dd <- as.data.frame(d)
+  #get the real values for the test points
+  ddt <- dd[dd$rID %in% w ,]
+  obs <- ddt$abundance
+  
+  #get the predicted value for the test points (first bootstrapping)
+  pr <- predict(m1,ddt,run=1)
+  
+  #get the root mean square error for model 1,2,3
+  rmse_df[i+3,3]<-rmse(obs,pr[,1] )
+  rmse_df[i+3,4]<-rmse(obs,pr[,2] )
+  rmse_df[i+3,5]<-rmse(obs,pr[,3] )
+  
+  rmse_df[i+3, 1]<-i
+  rmse_df[i+3,2]<-'train'
+  
+}
 
 
 #predict and plot 
@@ -771,9 +836,11 @@ for (i in 1: length(list_models)){
 }
 
 #plot_ensemble ----
-par(mfrow=c(1,1))
-plot(ens_gr1, main= '2000-2014 Ensemble')
-plot(ens_gr2, main= '2000-2014 Ensemble')
+par(mfrow=c(1,2))
+plot(ens_gr1, main= 'Group 1')
+plot(japan_outline, add=TRUE)
+plot(ens_gr6, main= 'Group 6')
+
 
 plot(japan_outline, add=TRUE)
 
@@ -895,10 +962,119 @@ plot(dif_list[[9]], main= 9 )
 plot(japan_outline, add=TRUE)
 
 
+
+#split into below zero and above zero
+
+for ( i in 1:length(dif_list)){
+layer<-dif_list[[i]]
+increase<-layer
+decrease<-layer
+increase[increase < 0]<-NA
+decrease[decrease>0]<-NA
+assign(paste0('increase_gr', i),increase)
+assign(paste0('decrease_gr', i),decrease)
+  
+}
+
+increase_list<-lapply(ls(pattern='increase_gr'), get)
+decrease_list<-lapply(ls(pattern='decrease_gr'), get)
+
+increase_stack<-stack(increase_list)
+decrease_stack<-stack(decrease_list)
+
+plot(increase_stack)
+plot(decrease_stack)
+
+
+#split in tropical and subtropical
+increase_trop_stack<-stack(increase_list[c(1,3,4,5,7,8)])
+plot(increase_trop_stack)
+
+increase_subtrop_stack<-stack(increase_list[c(2,6,9)])
+plot(increase_subtrop_stack)
+
+decrease_trop_stack<-stack(decrease_list[c(1,3,4,5,7,8)])
+plot(decrease_trop_stack)
+
+decrease_subtrop_stack<-stack(decrease_list[c(2,6,9)])
+plot(decrease_subtrop_stack)
+
+#where changes the most? values between 0, 1 for increase 
+install.packages('sdmvspecies')
+library(sdmvspecies)
+
+rescale_increase_trop<-rescale(increase_trop_stack)
+plot(rescale_increase_trop)
+
+rescale_increase_subtrop<-rescale(increase_subtrop_stack)
+
+trop_increase<-sum(rescale_increase_trop)
+
+sub_trop_increase<-sum(rescale_increase_subtrop)
+
+plot(trop_increase)
+plot(japan_outline, add=TRUE)
+
+#flip the decreases so that highest rates of change are highest(positive values)
+
+flip<-function(x){
+  x/-1
+}
+r <- calc(s, fun=sum)
+
+
+decrease_trop_stack<-flip(decrease_trop_stack)
+decrease_trop_stack<-stack(decrease_trop_stack)
+
+rescale_decrease_trop<-rescale(decrease_trop_stack)
+
+trop_decrease<-(sum(rescale_decrease_trop)/-1)
+
+plot(trop_decrease) 
+
+decrease_subtrop_stack<-flip(decrease_subtrop_stack)
+decrease_subtrop_stack<-stack(decrease_subtrop_stack)
+
+rescale_decrease_subtrop<-rescale(decrease_subtrop_stack)
+subtrop_decrease<- (sum(rescale_decrease_subtrop)/-1)
+
+plot(subtrop_decrease)
+
+library(RColorBrewer)
+library(viridis)
+
+#pal <- viridis(n=20, option='plasma' )
+pal<-colorRampPalette(c('green3', 'yellow', 'darksalmon', 'white'))
+
+
+par(mfrow=c(1,2))
+plot(trop_increase, main='Tropical FG Increase')
+plot(japan_outline, add=TRUE)
+plot(sub_trop_increase, main='Subtropical FG Increase')
+plot(japan_outline, add=TRUE)
+
+par(mfrow=c(1,2))
+plot(trop_decrease, col=pal(50), main='Tropical FG Decrease')
+plot(japan_outline, add=TRUE)
+plot(subtrop_decrease, col=pal(50), main='Subtropical FG Decrease')
+plot(japan_outline, add=TRUE)
+
+#need to get the same legend
+stack_posterplot<-stack(dif_list[[2]], dif_list[[4]], dif_list[[5]], dif_list[[8]])
+
+par(mfrow=c(2,2),  mai = c(0.3,0.2,0.2,0.2))
+
+plot(stack_posterplot)
+
+p1<-spplot(stack_posterplot, col.regions=terrain.colors)
+p1
+p1+layer(sp.polygons(japan_outline))
+
 ###test with GBIF? ----
 jp_species<- data.frame(species=unique(fish_survey$Species))
 jp_species
 
+/...
 #split in sp genus
 jp_species$species<-as.character(jp_species$species)
 jp_split<-strsplit(jp_species$species, '\\s+' )
