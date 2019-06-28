@@ -19,6 +19,7 @@ library(sdm)
 library(ggmap)
 library(ggplot2)
 library(raster)
+library(randomForest)
 
 setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
 
@@ -101,24 +102,111 @@ RCP85_2050<-stack(RCP85_2050, chlo_future)
 
 
 
-#get bathy layer for mask
-#compare with the marspec bathy
-bathy2<-load_layers(c('MS_bathy_5m'))
+##get bathy layer for mask
+##compare with the marspec bathy
 
-res(bathy2)
+#bathy2<-load_layers(c('MS_bathy_5m'))
 
-bathy2_jpn<-crop(bathy2, geographic.extent)
+#res(bathy2)
 
-my.colors = colorRampPalette(c("#5E85B8","#EDF0C0","#C13127")) 
+#bathy2_jpn<-crop(bathy2, geographic.extent)
+#
+#my.colors = colorRampPalette(c("#5E85B8","#EDF0C0","#C13127")) 
 
-plot(bathy2_jpn, col=my.colors(1000) )
+#plot(bathy2_jpn, col=my.colors(1000) )
 
-bathy_shallow2<-bathy2_jpn
+#bathy_shallow2<-bathy2_jpn
 
-bathy_shallow2[bathy_shallow2 < -100]<-NA
+#bathy_shallow2[bathy_shallow2 < -100]<-NA
 
 
-plot(bathy_shallow2, col=my.colors(1000))   #bathy_shallow2 = better 
+#plot(bathy_shallow2, col=my.colors(1000))   #bathy_shallow2 = better 
+
+
+#ok now crop by 200km buffer from coastline within MEOW 
+#looks weird so use MEOW?
+meow<-readOGR('MEOW/meow_ecos.shp')
+
+#plot
+par(mfrow=c(1,1))
+plot(meow)
+
+
+#get the right ecoregion
+##crop by ecoregion
+eco<-meow@data$ECOREGION
+which(eco=='Central Kuroshio Current')
+kuroshio.map<-meow[meow$ECOREGION %in% c('Central Kuroshio Current','South Kuroshio'),]
+plot(kuroshio.map)
+crs(kuroshio.map)
+points(group1, col='red')
+#merge shapefiles
+dissolve<- aggregate(kuroshio.map, dissolve=T)
+plot(dissolve)
+plot(japan_outline, add=TRUE)
+#plotting the ecoregion map
+#make transparent colours
+t_col <- function(color, percent = 50, name = NULL) {
+  #	  color = color name
+  #	percent = % transparency
+  #	   name = an optional name for the color
+  ## Get RGB values for named color
+  rgb.val <- col2rgb(color)
+  ## Make new color using input color as base and alpha set by transparency
+  t.col <- rgb(rgb.val[1], rgb.val[2], rgb.val[3],
+               max = 255,
+               alpha = (100-percent)*255/100,
+               names = name)
+  ## Save the color
+  invisible(t.col)
+  
+  
+}
+my.col<- t_col('cornflowerblue', percent = 50, name= 'transblue')
+## END
+
+
+plot(dissolve)# crop this with coastline buffer
+
+
+#read in predict area
+predict_area<-readOGR('plotting/japan_predictarea.shp')
+
+plot(predict_area)
+
+predict_area<-aggregate(predict_area)
+
+plot(predict_area)
+
+crs(predict_area)
+
+plot(japan_outline)
+
+plot(predict_area, add=TRUE)
+
+crs(predict_area)<-('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0' )
+
+crs(predict_area)
+
+
+#ok good
+
+crs(predict_area)
+crs(japan_outline)
+
+#meow preds
+
+plot(current_preds[[1]])
+
+area_pred<-mask(current_preds, predict_area)
+
+plot(area_pred[[1]])
+
+plot(japan_outline, add=TRUE)
+
+points(group1, col='red')
+
+crs(japan_outline)
 
 
 
@@ -412,3 +500,194 @@ m1
 m2<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , family=poisson, data=extract) #including random effects significantly reduces AIC
 m2
 
+m3<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss + island, family=poisson, data=extract)
+m3
+
+library(mgcv)
+
+m4<-gam(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss + island, family=poisson, data=extract)
+m4
+
+library(gamm4)
+m5<-gamm4(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss, random=~(1|island), family=poisson, data=extract)
+m5
+#gamm4 doesnt work with predict
+
+
+
+#now bootstrap? then RMSE
+#ok bootstrap in loop 
+
+#now loop through to find optimum % to cross validate with 
+rmse.bootstrap<-data.frame('glm'=1, 'glmer'=1, 'gam'=1, numbertest=1)
+
+rmse <- function(o,p) {
+  e <- o - p
+  sqrt(mean(e^2,na.rm=T))
+}
+
+for (j in 1:10){
+  for (i in 1:100){
+  #define test and training data
+  test<- extract[sample(nrow(extract), size=j, replace=FALSE),]  
+  train<- extract[(! row.names(extract) %in% row.names(test)), ]
+  
+  obvs<-test$abundance
+  
+  #make models
+  glm1<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , family=poisson, data=train)
+  glmer1<-glmer(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss + (1|island), family=poisson, data=train)
+  gam1<-gam(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss, family=poisson, data=train)
+  
+  #predict models for test
+  prglm<-predict( glm1, test)
+  prglmer<-predict(glmer1, test, allow.new.levels = TRUE)
+  prgam<-predict(gam1, test)
+  
+  
+  #now rmse for all
+  rmse.bootstrap[(j*100)-100+i,1]<-rmse(obvs, prglm)
+  rmse.bootstrap[(j*100)-100+i,2]<-rmse(obvs,prglmer)
+  rmse.bootstrap[(j*100)-100+i,3]<-rmse(obvs,prgam)
+  
+  rmse.bootstrap[(j*100)-100+i,4]<-j
+
+  }
+}
+
+write.csv(rmse.bootstrap, 'rmse.bootstrap2.csv')
+
+rmse.bootstrap<-read.csv('rmse.bootstrap2.csv')
+
+
+
+
+#plot
+rmse.bootstrap$numbertest<-as.factor(rmse.bootstrap$numbertest)
+
+ggplot(rmse.bootstrap, aes(x=numbertest, y=glm))+
+  geom_violin()
+
+ggplot(rmse.bootstrap, aes(x=numbertest, y=glmer))+
+  geom_violin()
+
+ggplot(rmse.bootstrap, aes(x=numbertest, y=gam))+
+  geom_violin()
+
+
+#get average RMSE for groups
+av_rmse<-rmse.bootstrap %>% group_by(numbertest) %>% summarise(mean_glm=mean(glm), mean_glmer=mean(glmer), mean_gam=mean(gam))
+
+ggplot(av_rmse, aes(x=numbertest, y=mean_glm))+
+  geom_point()+
+  geom_smooth()
+
+ggplot(av_rmse, aes(x=numbertest, y=mean_glmer))+
+  geom_point()+
+  geom_smooth()
+
+ggplot(av_rmse, aes(x=numbertest, y=mean_gam))+
+  geom_point()+
+  geom_smooth()
+
+# ok cross validate with 5 (15%)
+
+
+#NOW DO RANDOM FOREST
+m6<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
+                   BO2_chlomean_ss, data=extract, ntree=300, importance=TRUE   )
+m6
+
+predictrf<-predict(current_preds, m6)
+
+importance(m6)
+
+plot(predictrf)
+
+#maybe just dont use island as it becomes the most important variable
+
+#now model in loop with 15% test 85% training (n=5)
+rmse_all<-data.frame(glm=1, gam=1, rf=1)  
+
+for (i in 1:100){
+    #define test and training data
+    test<- extract[sample(nrow(extract), size=5, replace=FALSE),]  
+    train<- extract[(! row.names(extract) %in% row.names(test)), ]
+    
+    obvs<-test$abundance
+    
+    #make models
+    glm1<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , family=poisson, data=train)
+    gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5), family=poisson, data=train)
+    rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
+                        BO2_chlomean_ss, data=train, ntree=300, importance=TRUE   )
+    
+
+    #predict models for test
+    prglm<-predict( glm1, test)
+    prgam<-predict(gam1, test)
+    prRF<-predict(rf1, test)
+    
+    #now rmse for all
+    rmse_all[i,1]<-rmse(obvs, prglm)
+    rmse_all[i,2]<-rmse(obvs, prgam)
+    rmse_all[i,3]<-rmse(obvs, prRF)
+
+    
+  }
+
+write.csv(rmse_all, 'rmse_all_2806.csv')
+
+#now get averages
+glm_av<- mean(rmse_all$glm)
+gam_av<-mean(rmse_all$gam)
+rf_av<-mean(rmse_all$rf)
+
+averages<-data.frame(glm_av, gam_av, rf_av)
+
+#make ensemble model based on the averaged rmse 
+
+glm1
+gam1
+summary(rf1)
+rf1
+
+#get the model coefs to average #no this is wrong
+coef(glm1)
+coef(glm1)[1]
+coef<-data.frame(intercept=coef(glm1)[1], sst=coef(glm1)[2], cur=coef(glm1)[3],sal=coef(glm1)[4], chlo=coef(glm1)[5], model='glm')
+
+coef[1, 1:5]<-coef(glm1)[1:5]
+
+#ok make the full models then ensemble with the average weights
+glm_gr1<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , family=poisson, data=extract)
+gam_gr1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5), family=poisson, data=extract)
+rf_gr1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
+                    BO2_chlomean_ss, data=extract, ntree=300, importance=TRUE   )
+
+gam.check(gam_gr1)
+par(mfrow=c(1,1))
+plot.gam(gam_gr1)
+
+#now predict and ensemble
+pr_glm1<-predict(area_pred, glm_gr1)
+pr_gam1<-predict(area_pred, gam_gr1)
+pr_rf1<-predict(area_pred, rf_gr1)
+
+par(mfrow=c(2,2))
+plot(pr_glm1)
+plot(pr_gam1)
+  plot(pr_rf1)
+
+#ok now ensemble with averages
+props<-data.frame(glm=1, gam=1, rf=1)
+props[1,1]<-1-(averages[1,1]/(averages[1,1]+averages[1,2]+averages[1,3]))
+props[1,2]<-1-(averages[1,2]/(averages[1,1]+averages[1,2]+averages[1,3]))
+props[1,3]<-1-(averages[1,3]/(averages[1,1]+averages[1,2]+averages[1,3]))
+
+ensemble<- ((pr_glm1)*props[1,1]+pr_gam1*props[1,2]+pr_rf1*props[1,3])/3
+
+par(mfrow=c(1,1))
+plot(ensemble)
+
+##
