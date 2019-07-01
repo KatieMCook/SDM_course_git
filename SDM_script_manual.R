@@ -674,6 +674,7 @@ pr_glm1<-predict(area_pred, glm_gr1)
 pr_gam1<-predict(area_pred, gam_gr1)
 pr_rf1<-predict(area_pred, rf_gr1)
 
+par(mar=c(1,1,1,1))
 par(mfrow=c(2,2))
 plot(pr_glm1)
 plot(pr_gam1)
@@ -689,5 +690,131 @@ ensemble<- ((pr_glm1)*props[1,1]+pr_gam1*props[1,2]+pr_rf1*props[1,3])/3
 
 par(mfrow=c(1,1))
 plot(ensemble)
+plot(japan_outline, add=TRUE)
 
-##
+par('mar')
+
+##now run loop for alllllllll ----
+
+#extract the environmental values at lat lons 
+
+group_list<-lapply(ls(pattern="Obvs_gr_"),get)
+
+extract_km<-function(data){
+  latlon<-data.frame(lon=data$lon, lat=data$lat)
+  extract1<-as.data.frame(extract(current_preds, latlon))
+  extract1$lat<-latlon$lat
+  extract1$lon<-latlon$lon
+  extract1$abundance<-data$abundance
+  extract1
+  return(extract1)
+}
+
+extract_all<-lapply(group_list, extract_km)
+
+#create models 
+#now model in loop with 15% test 85% training (n=5)
+
+models_all<- function(data){
+
+  rmse_all<-data.frame(glm=1, gam=1, rf=1)  
+
+for (i in 1:100){
+  
+  #define test and training data
+  test<- data[sample(nrow(data), size=5, replace=FALSE),]  
+  train<- data[(! row.names(data) %in% row.names(test)), ]
+  
+  obvs<-test$abundance
+  
+  #make models
+  glm1<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , family=poisson, data=train)
+  gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5), family=poisson, data=train)
+  rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
+                      BO2_chlomean_ss, data=train, ntree=300, importance=TRUE   )
+  
+  
+  #predict models for test
+  prglm<-predict( glm1, test)
+  prgam<-predict(gam1, test)
+  prRF<-predict(rf1, test)
+  
+  #now rmse for all
+  rmse_all[i,1]<-rmse(obvs, prglm)
+  rmse_all[i,2]<-rmse(obvs, prgam)
+  rmse_all[i,3]<-rmse(obvs, prRF)
+
+}
+  
+  return(rmse_all) 
+ 
+  
+}
+
+allrmse<-lapply(extract_all, models_all)
+
+#get averages as it didnt work 
+
+average_km<-function(data){
+  
+  glm_av<- mean(data$glm)
+  gam_av<-mean(data$gam)
+  rf_av<-mean(data$rf)
+  
+  averages<-data.frame(glm_av, gam_av, rf_av)
+  
+  return(averages)
+  
+}
+
+averages<-lapply(allrmse, average_km)
+
+#gam is bad so dont use
+
+#full model, predict and ensemble   #loop
+
+for (i in 1:length(extract_all)) {
+  
+  glm_gr<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , family=poisson, data=extract_all[[i]])
+  rf_gr<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
+                         BO2_chlomean_ss, data=extract_all[[i]], ntree=300, importance=TRUE   )
+  
+  assign(paste0('glm_gr', i), glm_gr)
+  assign(paste0('rf_gr', i), rf_gr)
+  
+  pr_glm<-predict(area_pred, glm_gr)
+  pr_rf<-predict(area_pred, rf_gr)    
+  
+  assign(paste0('pr_glm_gr', i), pr_glm)
+  assign(paste0('pr_rf_gr', i), pr_rf)
+  
+props<-data.frame(glm=1, rf=1)
+props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]++averages[[i]][1,3]))
+props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
+
+ assign(paste0('prop_gr', i), props)
+ 
+ ensemble<- ((pr_glm*props[1,1])+(pr_rf*props[1,2]))
+ 
+ assign(paste0('ensemble_gr', i), ensemble)
+ 
+  
+ }
+
+#plot ensembles
+
+ens_list<-lapply(ls(pattern="ensemble_gr"),get)
+
+par(mar=c(1.2,1.2,1.2,1.2))
+par(mfrow=c(3,3))
+
+for ( i in 1:length(ens_list)){
+  plot(ens_list[[i]], main= i )
+  plot(japan_outline, add=TRUE)
+  
+}
+
+
+
+
+
