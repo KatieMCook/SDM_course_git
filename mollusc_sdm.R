@@ -290,11 +290,14 @@ ggplot(k10_site, aes(x=lat, y=abundance, col=group_k10))+
 #plot proportion of community 
 k7_site_prop<- k7_site %>% group_by(SiteID, lat, lon) %>% mutate(total_abun= sum(abundance)) %>% mutate(prop= abundance/total_abun)
 
-ggplot(k7_site_prop, aes(x=lat, y=prop, col=group_k7))+
+names(k7_site_prop)
+k7_site_prop<- k7_site_prop %>% rename(group=group_k7)
+
+ggplot(k7_site_prop, aes(x=lat, y=prop, col=group))+
   geom_point()+
   geom_smooth(method='lm', se=FALSE)+
   labs(x='Latitude', y='Proportion of Community')+
-  theme_light()+
+  theme_bw()+
   ylim(0,0.7)
 
 
@@ -441,18 +444,28 @@ for (i in 1:length(extract_all)) {
 }
 
 #plot ensembles
+library(viridis)
+pal<-viridis(option='plasma', n=40, direction=-1)
 
 ens_list<-lapply(ls(pattern="ensemble_gr"),get)
 
-par(mar=c(1.2,1.2,1.2,1.2))
+par(mar=c(2,1.5,1.5,1.5))
 par(mfrow=c(3,3))
 
 for ( i in 1:length(ens_list)){
-  plot(ens_list[[i]], main= i )
-  plot(japan_outline, add=TRUE)
-  
+  plot(ens_list[[i]], main= paste0('Group ', i), col= pal)
+  plot(japan_outline, add=TRUE, col='light grey')
+  box()
 }
 
+#plot tropical subtropical
+par(mfrow=c(1,2))
+plot(ens_list[[2]], col=pal, main='Group 2')
+plot(japan_outline, col='light grey', add=TRUE)
+box()
+plot(ens_list[[3]], col=pal, main='Group 3')
+plot(japan_outline, add=TRUE, col='light grey')
+box()
 
 #now future 
 rm(glm_gr)
@@ -510,8 +523,9 @@ dif_list<-lapply(ls(pattern='dif_gr'), get)
 
 par(mfrow=c(3,3))
 for (i in 1:length(dif_list)){
-  plot(dif_list[[i]])
-  plot(japan_outline, add=TRUE)
+  plot(dif_list[[i]], col=pal, main=paste0('Group ', i))
+  plot(japan_outline, add=TRUE, col='light grey')
+  box()
 }
 
 
@@ -568,8 +582,10 @@ plot(rescale_increase_trop)
 rescale_increase_subtrop<-rescale(increase_subtrop_stack)
 
 trop_increase<-sum(rescale_increase_trop)
+trop_increase<-rescale(trop_increase)
 
 sub_trop_increase<-sum(rescale_increase_subtrop)
+sub_trop_increase<-rescale(sub_trop_increase)
 
 plot(trop_increase)
 plot(japan_outline, add=TRUE)
@@ -589,6 +605,7 @@ rescale_decrease_trop<-rescale(decrease_trop_stack)
 
 trop_decrease<-(sum(rescale_decrease_trop)/-1)
 
+par(mfrow=c(1,1))
 plot(trop_decrease) 
 
 decrease_subtrop_stack<-flip(decrease_subtrop_stack)
@@ -597,26 +614,35 @@ decrease_subtrop_stack<-stack(decrease_subtrop_stack)
 rescale_decrease_subtrop<-rescale(decrease_subtrop_stack)
 subtrop_decrease<- (sum(rescale_decrease_subtrop)/-1)
 
+subtrop_decrease<-(rescale(subtrop_decrease))/-1
 plot(subtrop_decrease)
 
 library(RColorBrewer)
 library(viridis)
 
-#pal <- viridis(n=20, option='plasma' )
-pal<-colorRampPalette(c('green3', 'yellow', 'darksalmon', 'white'))
-
-
-par(mfrow=c(1,2))
-plot(trop_increase, main='Tropical FG Increase')
-plot(japan_outline, add=TRUE)
-plot(sub_trop_increase, main='Subtropical FG Increase')
-plot(japan_outline, add=TRUE)
+pal<-viridis(option='plasma', n=40, direction=-1)
+palm<-viridis(option='plasma', n=40)
 
 par(mfrow=c(1,2))
-plot(trop_decrease, col=pal(50), main='Tropical FG Decrease')
-plot(japan_outline, add=TRUE)
-plot(subtrop_decrease, col=pal(50), main='Subtropical FG Decrease')
-plot(japan_outline, add=TRUE)
+plot(trop_increase, main='Tropical FG Increase', col=pal)
+plot(japan_outline, col='light grey' , add=TRUE)
+box()
+plot(sub_trop_increase, main='Subtropical FG Increase', col=pal)
+plot(japan_outline, col='light grey', add=TRUE)
+box()
+
+par(mfrow=c(1,2))
+plot(trop_decrease,  main='Tropical FG Decrease', col=palm)
+plot(japan_outline, add=TRUE, col='light grey')
+box()
+plot(subtrop_decrease, col=palm, main='Subtropical FG Decrease')
+plot(japan_outline, add=TRUE, col='light grey')
+box()
+
+writeRaster(trop_increase, 'change_hotspots/molls_trop_increase.tif', format='GTiff')
+writeRaster(sub_trop_increase, 'change_hotspots/molls_subtrop_increase.tif', format='GTiff')
+writeRaster(trop_decrease, 'change_hotspots/molls_trop_decrease.tif', format='GTiff')
+writeRaster(subtrop_decrease, 'change_hotspots/molls_subtrop_decrease.tif', format='GTiff')
 
 #need to get the same legend
 stack_posterplot<-stack(dif_list[[2]], dif_list[[4]], dif_list[[5]], dif_list[[8]])
