@@ -536,42 +536,47 @@ for (i in 1:length(dif_list26)){
 
 
 #now buffer 30km from the coast and crop by predict area----
-crs(japan_outline) #in wgs project into something in km 
-crs(predict_area)
+#crs(japan_outline) #in wgs project into something in km 
+#(predict_area)
 
-japan_outline_proj<-spTransform(japan_outline, '+proj=utm +zone=54 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs ')
+#japan_outline_proj<-spTransform(japan_outline, '+proj=utm +zone=54 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs ')
 
-crs(japan_outline_proj)
-par(mfrow=c(1,1))
-plot(japan_outline_proj)
+#crs(japan_outline_proj)
+#par(mfrow=c(1,1))
+#plot(japan_outline_proj)
 
-predict_area_proj<- spTransform(predict_area, '+proj=utm +zone=54 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs ')
-crs(predict_area_proj)
+#predict_area_proj<- spTransform(predict_area, '+proj=utm +zone=54 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs ')
+#crs(predict_area_proj)
 
-plot(predict_area_proj, add=TRUE, col='pink')
+#plot(predict_area_proj, add=TRUE, col='pink')
 
 #crop this by predict area
-crop_outline<-gIntersection(japan_outline_proj, predict_area_proj)
+#crop_outline<-gIntersection(japan_outline_proj, predict_area_proj)
 
-plot(crop_outline)
+#plot(crop_outline)
 
 #buffer this by 30km 
 #hmm doesn't work project back 
 
-outline_30k<- buffer(crop_outline, width=30000, dissolve=TRUE)
-plot(outline_30k, col='yellow')
-plot(crop_outline, col='pink', add=TRUE)
+#outline_30k<- buffer(crop_outline, width=30000, dissolve=TRUE)
+#plot(outline_30k, col='yellow')
+#plot(crop_outline, col='pink', add=TRUE)
 
 
 #dif list in different CRS so project back
-crs(dif_list85[[1]])
+#crs(dif_list85[[1]])
 
-crop_outline<- spTransform(crop_outline, ' +proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 ')
+#crop_outline<- spTransform(crop_outline, ' +proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 ')
+
+buffer30k<-readOGR('30k_coastplot/outline30k.shp')
+crs(buffer30k)
+
+buffer30k<-spTransform(buffer30k,  '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0' )
 
 #now mask dif 85 by buffer crop
 
 for (i in 1:length(dif_list85)){
-  dif_mask<- mask(dif_list85[[i]], crop_outline)
+  dif_mask<- mask(dif_list85[[i]], buffer30k)
   assign(paste0('dif85_mask_gr', i), dif_mask)
 }
 
@@ -633,7 +638,7 @@ dif85_all_df<-do.call(rbind, dif85_values_all)
 
 dif85_all_df$group<-as.factor(dif85_all_df$group)
 
-install.packages('ggforce')
+
 library('ggforce')
 
 ggplot(dif85_all_df, aes(x=slope, y=values, col=group))+
@@ -646,7 +651,7 @@ ggplot(dif85_all_df, aes(x=slope, y=values, col=group))+
 #now mask dif 85 by buffer crop
 
 for (i in 1:length(dif_list26)){
-  dif_mask<- mask(dif_list26[[i]], crop_outline)
+  dif_mask<- mask(dif_list26[[i]], buffer30k)
   assign(paste0('dif26_mask_gr', i), dif_mask)
 }
 
