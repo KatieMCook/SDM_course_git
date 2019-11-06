@@ -99,6 +99,23 @@ chlo_future<-crop(chlo_future, geographic.extent)
 
 RCP85_2050<-stack(RCP85_2050, chlo_future)
 
+#RCP 26 2050
+future_2050<-filter(future_layers, year==2050, scenario=='RCP26')
+
+RCP26_2050<-load_layers(c(c('BO2_RCP26_2050_tempmin_ss','BO2_RCP26_2050_curvelmean_bdmin',
+                            'BO2_RCP26_2050_salinitymean_ss')))
+
+chlo_future26<-load_layers('BO2_RCP26_2050_chlomean_ss')
+
+#RCP26
+RCP26_2050<-crop(RCP26_2050, geographic.extent)
+chlo_future26<-crop(chlo_future26, geographic.extent)
+
+RCP26_2050<-stack(RCP26_2050, chlo_future26)
+
+plot(RCP26_2050)
+
+
 
 #read in predict area
 predict_area<-readOGR('plotting/japan_predictarea.shp')
@@ -139,7 +156,8 @@ crs(japan_outline)
 
 future_preds<-mask(RCP85_2050, predict_area)
 
-
+RCP85_2050<-mask(RCP85_2050, predict_area)
+RCP26_2050<-mask(RCP26_2050, predict_area)
 
 
 #now get mollusc data----
@@ -351,7 +369,7 @@ extract_all<-lapply(group_list, extract_km)
 
 models_all<- function(data){
   
-  rmse_all<-data.frame(glm=1, gam=1, rf=1)  
+  rmse_all<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, RFP=1)  
   
   for (i in 1:100){
     
@@ -378,7 +396,13 @@ models_all<- function(data){
     rmse_all[i,2]<-rmse(obvs, prgam)
     rmse_all[i,3]<-rmse(obvs, prRF)
     
+    #now pearsons correlation for all 
+    rmse_all[i,4]<-cor(obvs, prglm, method = c("pearson"))
+    rmse_all[i,5]<-cor(obvs, prgam, method = c("pearson"))
+    rmse_all[i,6]<-cor(obvs, prRF, method = c("pearson"))
   }
+    
+  
   
   return(rmse_all) 
   
@@ -387,13 +411,14 @@ models_all<- function(data){
 
 allrmse<-lapply(extract_all, models_all)
 
+
 #get averages as it didnt work 
 
 average_km<-function(data){
   
-  glm_av<- mean(data$glm)
-  gam_av<-mean(data$gam)
-  rf_av<-mean(data$rf)
+  glm_av<- mean(data$glmR, na.rm=TRUE)
+  gam_av<-mean(data$gamR, na.rm=TRUE)
+  rf_av<-mean(data$rfR, na.rm=TRUE)
   
   averages<-data.frame(glm_av, gam_av, rf_av)
   
@@ -401,6 +426,8 @@ average_km<-function(data){
   
 }
 
+
+allrmse[[1]]
 averages<-lapply(allrmse, average_km)
 
 averages[[1]]
@@ -410,6 +437,29 @@ averages[[4]]
 averages[[5]]
 averages[[6]]
 averages[[7]]
+
+
+
+#averages pearsons 
+average_p<-function(data){
+  
+  glm_av<- mean(data$glmP, na.rm=TRUE)
+  gam_av<-mean(data$gamP, na.rm=TRUE)
+  rf_av<-mean(data$RFP, na.rm=TRUE)
+  
+  averages<-data.frame(glm_av, gam_av, rf_av)
+  
+  return(averages)
+  
+}
+
+average_pear<-lapply(allrmse, average_p)
+
+average_pear[[1]]
+average_pear[[2]]
+average_pear[[3]]
+average_pear[[4]]
+average_pear[[5]]
 
 #gam is bad so dont use
 
@@ -430,15 +480,22 @@ for (i in 1:length(extract_all)) {
   assign(paste0('pr_glm_gr', i), pr_glm)
   assign(paste0('pr_rf_gr', i), pr_rf)
   
-  props<-data.frame(glm=1, rf=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]++averages[[i]][1,3]))
+  props<-data.frame(glmR=1, rfR=1, glmP=1, rfP=1)
+  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,3]))
   props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
+  
+  props[1,3]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,3]))
+  props[1,4]<-abs(average_pear[[i]][1,3])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,3]))
+  
+  props<-data.frame(glm=((props[1,1]+props[1,3])/(props[1,1]+props[1,2]+props[1,3]+props[1,4])), 
+                    rf=((props[1,2]+props[1,4])/(props[1,1]+props[1,2]+props[1,3]+props[1,4])))
   
   assign(paste0('prop_gr', i), props)
   
   ensemble<- ((pr_glm*props[1,1])+(pr_rf*props[1,2]))
   
   assign(paste0('ensemble_gr', i), ensemble)
+  
   
   
 }
@@ -467,7 +524,8 @@ plot(ens_list[[3]], col=pal, main='Group 3')
 plot(japan_outline, add=TRUE, col='light grey')
 box()
 
-#now future 
+
+#now future RCP85
 rm(glm_gr)
 
 glm_list<-lapply(ls(pattern='glm_gr'), get)
@@ -477,56 +535,332 @@ rm(rf_gr)
 rf_list<-lapply(ls(pattern='rf_gr'), get)
 
 #make sure the colnames match
-names(future_preds)<-names(current_preds)
-plot(future_preds)
+names(RCP85_2050)<-names(current_preds)
 
 
 for (i in 1:length(extract_all)) {
   
-  pr_glm_fut<-predict(future_preds, glm_list[[i]])
-  pr_rf_fut<-predict(future_preds, rf_list[[i+7]])
+  pr_glm_fut<-predict(RCP85_2050, glm_list[[i]])
+  pr_rf_fut<-predict(RCP85_2050, rf_list[[i+7]])
   
-  assign(paste0('glm_fut', i), pr_glm_fut)
-  assign(paste0('rf_fut', i), pr_rf_fut)
+  assign(paste0('glm_fut_85', i), pr_glm_fut)
+  assign(paste0('rf_fut_85', i), pr_rf_fut)
   
-  props<-data.frame(glm=1, rf=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]++averages[[i]][1,3]))
+  props<-data.frame(glmR=1, rfR=1, glmP=1, rfP=1)
+  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,3]))
   props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
+  
+  props[1,3]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,3]))
+  props[1,4]<-abs(average_pear[[i]][1,3])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,3]))
+  
+  props<-data.frame(glm=((props[1,1]+props[1,3])/(props[1,1]+props[1,2]+props[1,3]+props[1,4])), rf=((props[1,2]+props[1,4])/(props[1,1]+props[1,2]+props[1,3]+props[1,4])))
   
   ensemble_fut<- ((pr_glm_fut*props[1,1])+(pr_rf_fut*props[1,2]))
   
-  assign(paste0('fut_ensemble_gr', i), ensemble_fut)
+  assign(paste0('fut_ensemble_85_gr', i), ensemble_fut)
   
   
   
 }
-plot(fut_ensemble_gr7)
+plot(fut_ensemble_85_gr7)
 
-fut_ens_list<-lapply(ls(pattern='fut_ensemble_gr'), get)
+fut_ens85_list<-lapply(ls(pattern='fut_ensemble_85_gr'), get)
 
 
 #plot
 par(mfrow=c(3,3))
 
-for (i in 1:length(fut_ens_list)){
-  plot(fut_ens_list[[i]])
+for (i in 1:length(fut_ens85_list)){
+  plot(fut_ens85_list[[i]], col=pal, main=paste0('Group', i))
+  plot(japan_outline, add=TRUE, col='light grey', border='black')
+  box()
+  
 }
 
-#now get difference between two and plot
-for ( i in 1:length(fut_ens_list)){
+
+#NOW RCP26!!!!
+#make sure the colnames match
+names(RCP26_2050)<-names(current_preds)
+plot(RCP26_2050)
+
+
+for (i in 1:length(extract_all)) {
   
-  diff<- fut_ens_list[[i]] - ens_list[[i]]
+  pr_glm_fut<-predict(RCP26_2050, glm_list[[i]])
+  pr_rf_fut<-predict(RCP26_2050, rf_list[[i+7]])
+  
+  assign(paste0('glm_fut_26', i), pr_glm_fut)
+  assign(paste0('rf_fut_26', i), pr_rf_fut)
+  
+  props<-data.frame(glmR=1, rfR=1, glmP=1, rfP=1)
+  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,3]))
+  props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
+  
+  props[1,3]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,3]))
+  props[1,4]<-abs(average_pear[[i]][1,3])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,3]))
+  
+  props<-data.frame(glm=((props[1,1]+props[1,3])/(props[1,1]+props[1,2]+props[1,3]+props[1,4])), rf=((props[1,2]+props[1,4])/(props[1,1]+props[1,2]+props[1,3]+props[1,4])))
+  
+  ensemble_fut<- ((pr_glm_fut*props[1,1])+(pr_rf_fut*props[1,2]))
+  
+  assign(paste0('fut_ensemble_26_gr', i), ensemble_fut)
+  
+  
+  
+}
+
+fut_ens26_list<-lapply(ls(pattern='fut_ensemble_26_gr'), get)
+
+
+#plot
+par(mfrow=c(3,3))
+
+for (i in 1:length(fut_ens26_list)){
+  plot(fut_ens26_list[[i]], col=pal, main=paste0('Group', i))
+  plot(japan_outline, add=TRUE, col='light grey', border='black')
+  box()
+  
+}
+
+
+#now get difference between two and plot
+#RCP85
+for ( i in 1:length(fut_ens85_list)){
+  
+  diff<- fut_ens85_list[[i]] - ens_list[[i]]
   assign(paste0('dif_gr', i), diff)
 }
 
-dif_list<-lapply(ls(pattern='dif_gr'), get)
+dif_list85<-lapply(ls(pattern='dif_gr'), get)
 
 par(mfrow=c(3,3))
-for (i in 1:length(dif_list)){
-  plot(dif_list[[i]], col=pal, main=paste0('Group ', i))
-  plot(japan_outline, add=TRUE, col='light grey')
+for (i in 1:length(dif_list85)){
+  plot(dif_list85[[i]], main=paste0('Group ', i), col=pal)
+  plot(japan_outline, add=TRUE, col='light grey', border='black')
   box()
 }
+
+#RCP26
+for ( i in 1:length(fut_ens26_list)){
+  
+  diff<- fut_ens26_list[[i]] - ens_list[[i]]
+  assign(paste0('dif_gr', i), diff)
+}
+
+dif_list26<-lapply(ls(pattern='dif_gr'), get)
+
+par(mfrow=c(3,3))
+for (i in 1:length(dif_list26)){
+  plot(dif_list26[[i]], main=paste0('Group ', i), col=pal)
+  plot(japan_outline, add=TRUE, col='light grey', border='black')
+  box()
+}
+
+
+
+
+#now buffer 30km from the coast and crop by predict area----
+#crs(japan_outline) #in wgs project into something in km 
+#crs(predict_area)
+
+#japan_outline_proj<-spTransform(japan_outline, '+proj=utm +zone=54 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs ')
+
+#crs(japan_outline_proj)
+#par(mfrow=c(1,1))
+#plot(japan_outline_proj)
+
+#predict_area_proj<- spTransform(predict_area, '+proj=utm +zone=54 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs ')
+#crs(predict_area_proj)
+
+#plot(predict_area_proj, add=TRUE, col='pink')
+
+#crop this by predict area
+#crop_outline<-gIntersection(japan_outline_proj, predict_area_proj)
+
+#plot(crop_outline)
+
+#buffer this by 30km 
+#hmm doesn't work project back 
+
+#outline_30k<- buffer(crop_outline, width=30000, dissolve=TRUE)
+#plot(outline_30k, col='yellow')
+#plot(crop_outline, col='pink', add=TRUE)
+
+
+#dif list in different CRS so project back
+#crs(dif_list85[[1]])
+
+#crop_outline<- spTransform(crop_outline, ' +proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0 ')
+
+#outline_30k<-st_as_sf(outline_30k)
+#plot(outline_30k)
+
+#st_write(outline_30k, '30k_coastplot', 'outline30k.shp', driver='ESRI Shapefile')
+
+buffer30k<-readOGR('30k_coastplot/outline30k.shp')
+crs(buffer30k)
+
+buffer30k<-spTransform(buffer30k,  '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0' )
+
+crs(japan_outline)
+#now mask dif 85 by buffer crop
+
+for (i in 1:length(dif_list85)){
+  dif_mask<- mask(dif_list85[[i]], buffer30k)
+  assign(paste0('dif85_mask_gr', i), dif_mask)
+}
+
+dif_mask85<-lapply(ls(pattern='dif85_mask_gr'), get)
+
+plot(dif_mask85[[1]])
+
+par(mfrow=c(3,2))
+
+for (i in 1:length(dif_mask85)){
+  plot(dif_mask85[[i]])
+}
+
+#ok now extract the lat lons of the raster and plot 
+#turn all the variables to points then get the coords of points
+
+par(mfrow=c(1,1))
+points<- rasterToPoints(dif_mask85[[2]])
+plot(points)
+coords<-as.data.frame(coordinates(points))
+coords<-coords[,-3]
+
+#extract from the coords
+values<- extract(dif_list85[[2]], coords)
+
+coords$values<-values
+
+coords$slope<-coords$x * coords$y
+
+ggplot(coords, aes(x=slope, y=values))+
+  geom_point()+
+  geom_smooth(method='lm')
+
+
+#make it for all RCP85
+for (i in 1:length(dif_mask85)){
+  points<-rasterToPoints(dif_mask85[[i]])
+  coords<-as.data.frame(coordinates(points))
+  coords<-coords[-3]
+  values<-extract(dif_list85[[i]], coords)
+  coords$values<-values
+  coords$slope<-coords$ x * coords$y
+  assign(paste0('dif85_values_gr', i), coords)
+}
+
+dif85_values_all<-lapply(ls(pattern='dif85_values_gr'), get)
+
+
+#group into 1 df
+for (i in 1: length(dif85_values_all)){
+  dif85_values_all[[i]]$group<-i
+  dif85_values_all[[i]]$climate<-'RCP85'
+}
+
+View(dif85_values_all[[1]])
+
+#now merge them all together 
+dif85_all_df<-do.call(rbind, dif85_values_all)
+
+dif85_all_df$group<-as.factor(dif85_all_df$group)
+
+ggplot(dif85_all_df, aes(x=slope, y=values, col=group))+
+  geom_smooth(method='loess', se=FALSE)
+# facet_zoom(ylim=c(-2, 2))  #zooms in on the smaller ones 
+
+
+#RCP 26
+
+#now mask dif 85 by buffer crop
+
+for (i in 1:length(dif_list26)){
+  dif_mask<- mask(dif_list26[[i]], buffer30k)
+  assign(paste0('dif26_mask_gr', i), dif_mask)
+}
+
+dif_mask26<-lapply(ls(pattern='dif26_mask_gr'), get)
+
+plot(dif_mask26[[1]])
+
+par(mfrow=c(3,3))
+
+for (i in 1:length(dif_mask26)){
+  plot(dif_mask26[[i]])
+}
+
+#ok now extract the lat lons of the raster and plot 
+#turn all the variables to points then get the coords of points
+
+
+for (i in 1:length(dif_mask26)){
+  points<-rasterToPoints(dif_mask26[[i]])
+  coords<-as.data.frame(coordinates(points))
+  coords<-coords[-3]
+  values<-extract(dif_list26[[i]], coords)
+  coords$values<-values
+  coords$slope<-coords$ x * coords$y
+  assign(paste0('dif26_values_gr', i), coords)
+}
+
+dif26_values_all<-lapply(ls(pattern='dif26_values_gr'), get)
+
+
+#group into 1 df
+for (i in 1: length(dif26_values_all)){
+  dif26_values_all[[i]]$group<-i
+  dif26_values_all[[i]]$climate<-'RCP26'
+}
+
+View(dif26_values_all[[1]])
+
+#now merge them all together 
+dif26_all_df<-do.call(rbind, dif26_values_all)
+
+dif26_all_df$group<-as.factor(dif26_all_df$group)
+
+
+ggplot(dif26_all_df, aes(x=slope, y=values, col=group))+
+  geom_smooth(method='loess', se=FALSE)
+# facet_zoom(ylim=c(-2, 2))  #zooms in on the smaller ones 
+
+#now merge both climate scenarios
+dif_values_all<- rbind(dif85_all_df, dif26_all_df)
+dif_values_all$climate<-as.factor(dif_values_all$climate)
+
+
+ggplot(dif_values_all, aes(x=slope, y=values, col=group))+
+  geom_smooth(method='loess', se=FALSE)+
+  facet_wrap(~climate)
+
+write.csv(dif_values_all, 'dif_values_all_molluscs.csv')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #ooookkkkk
