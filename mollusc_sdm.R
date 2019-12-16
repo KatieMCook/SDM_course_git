@@ -624,10 +624,27 @@ for (i in 1:length(fut_ens26_list)){
 
 
 #now get difference between two and plot
+#before getting difference standardise abundance between zero and 1 ----
+
+normalize <- function(x) {
+  return ((x -  x@data@min)/ (x@data@max -  x@data@min))
+}
+
+fut_ens85_norm<- lapply(fut_ens85_list, normalize)
+
+ens_list_norm<-lapply(ens_list, normalize)
+
+fut_ens26_norm<-lapply(fut_ens26_list, normalize)
+
+
+
+
+
+#now get difference between two and plot
 #RCP85
-for ( i in 1:length(fut_ens85_list)){
+for ( i in 1:length(fut_ens85_norm)){
   
-  diff<- fut_ens85_list[[i]] - ens_list[[i]]
+  diff<- fut_ens85_norm[[i]] - ens_list_norm[[i]]
   assign(paste0('dif_gr', i), diff)
 }
 
@@ -641,9 +658,9 @@ for (i in 1:length(dif_list85)){
 }
 
 #RCP26
-for ( i in 1:length(fut_ens26_list)){
+for ( i in 1:length(fut_ens26_norm)){
   
-  diff<- fut_ens26_list[[i]] - ens_list[[i]]
+  diff<- fut_ens26_norm[[i]] - ens_list_norm[[i]]
   assign(paste0('dif_gr', i), diff)
 }
 
@@ -655,6 +672,7 @@ for (i in 1:length(dif_list26)){
   plot(japan_outline, add=TRUE, col='light grey', border='black')
   box()
 }
+
 
 
 
@@ -836,7 +854,7 @@ ggplot(dif_values_all, aes(x=slope, y=values, col=group))+
   geom_smooth(method='loess', se=FALSE)+
   facet_wrap(~climate)
 
-write.csv(dif_values_all, 'dif_values_all_molluscs.csv')
+write.csv(dif_values_all, 'dif_values_all_molluscs_norm.csv')
 
 
 
