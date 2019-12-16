@@ -499,19 +499,33 @@ for (i in 1:length(fut_ens26_list)){
   
 }
 
+#before getting difference standardise abundance between zero and 1 ----
+
+normalize <- function(x) {
+  return ((x -  x@data@min)/ (x@data@max -  x@data@min))
+}
+
+fut_ens85_norm<- lapply(fut_ens85_list, normalize)
+
+ens_list_norm<-lapply(ens_list, normalize)
+
+fut_ens26_norm<-lapply(fut_ens26_list, normalize)
+
+
+
 
 
 #now get difference between two and plot
 #RCP85
-for ( i in 1:length(fut_ens85_list)){
+for ( i in 1:length(fut_ens85_norm)){
   
-  diff<- fut_ens85_list[[i]] - ens_list[[i]]
+  diff<- fut_ens85_norm[[i]] - ens_list_norm[[i]]
   assign(paste0('dif_gr', i), diff)
 }
 
 dif_list85<-lapply(ls(pattern='dif_gr'), get)
 
-par(mfrow=c(2,3))
+par(mfrow=c(3,3))
 for (i in 1:length(dif_list85)){
   plot(dif_list85[[i]], main=paste0('Group ', i), col=pal)
   plot(japan_outline, add=TRUE, col='light grey', border='black')
@@ -519,20 +533,22 @@ for (i in 1:length(dif_list85)){
 }
 
 #RCP26
-for ( i in 1:length(fut_ens26_list)){
+for ( i in 1:length(fut_ens26_norm)){
   
-  diff<- fut_ens26_list[[i]] - ens_list[[i]]
+  diff<- fut_ens26_norm[[i]] - ens_list_norm[[i]]
   assign(paste0('dif_gr', i), diff)
 }
 
 dif_list26<-lapply(ls(pattern='dif_gr'), get)
 
-par(mfrow=c(2,3))
+par(mfrow=c(3,3))
 for (i in 1:length(dif_list26)){
   plot(dif_list26[[i]], main=paste0('Group ', i), col=pal)
   plot(japan_outline, add=TRUE, col='light grey', border='black')
   box()
 }
+
+
 
 
 #now buffer 30km from the coast and crop by predict area----
@@ -706,12 +722,12 @@ dif_values_all$climate<-as.factor(dif_values_all$climate)
 
 
 ggplot(dif_values_all, aes(x=slope, y=values, col=group))+
-  geom_smooth(method='loess', se=FALSE)+
+ geom_smooth(method='loess', se=FALSE)+
   facet_wrap(~climate)
 
 
 #ok now add on 'algae column'
-write.csv(dif_values_all, 'dif_values_all_algae.csv')
+write.csv(dif_values_all, 'dif_values_all_algae_norm.csv')
 
 #ooookkkkk
 #now can find where the areas change the most
