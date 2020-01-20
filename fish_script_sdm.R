@@ -153,6 +153,52 @@ RCP85_2050<-mask(RCP85_2050, predict_area)
 RCP26_2050<-mask(RCP26_2050, predict_area)
 
 
+#standardise coefficients
+standard<- function(data){
+  stand_dat<-(data[]-mean(data[], na.rm=TRUE))
+  return(stand_dat)
+  
+}
+
+#test with 1 of area pred 1 
+stand_ras<-standard(area_pred[[1]])
+stand_ras[]
+
+test_ras<-area_pred[[1]]
+
+test_ras[]<-stand_ras[]
+
+par(mfrow=c(1,2))
+
+plot(area_pred[[1]])
+plot(test_ras)
+
+#now write loop to standardise all 
+length(area_pred)
+
+par(mfrow=c(2,2))
+
+for (i in 1:nlayers(area_pred)){
+  stand_ras<-standard(area_pred[[i]])
+  
+  test_ras<-area_pred[[i]]
+  
+  test_ras[]<-stand_ras[]
+  
+  assign(paste0('stand_', i), test_ras)
+  
+}
+
+plot()
+
+stand_stack<-stack(stand_1, stand_2, stand_3, stand_4)
+
+names(stand_stack)
+
+plot(stand_stack)
+
+
+#ok now standardised
 
 #ok now get data
 #Fish data
@@ -269,10 +315,12 @@ names(fgroup_site)<-c( "Site"  ,    "group"  ,   "abundance" , "lat"    ,    "lo
 fgroup_site$group<-as.factor(fgroup_site$group)
 
 #plot functional groups by lat and lon (by abundance)
+
 ggplot(fgroup_site, aes(x=lat, y=abundance, col=group))+
   geom_point()+
   geom_smooth(method='lm', se=FALSE)+
-  labs(x='Latitude', y='Abundance')
+  labs(x='Latitude', y='Abundance')+
+  facet_wrap(~group, scales = 'free')
 
 #plot by proportion
 fgroup_site_prop<- fgroup_site %>% group_by(Site, lat, lon) %>% mutate(total_abun= sum(abundance)) %>% mutate(prop= abundance/total_abun)
@@ -415,7 +463,7 @@ group_list<-lapply(ls(pattern="Obvs_gr_"),get)
 
 extract_km<-function(data){
   latlon<-data.frame(lon=data$lon, lat=data$lat)
-  extract1<-as.data.frame(extract(current_preds, latlon))
+  extract1<-as.data.frame(extract(stand_stack, latlon))
   extract1$lat<-latlon$lat
   extract1$lon<-latlon$lon
   extract1$abundance<-data$abundance
@@ -430,6 +478,58 @@ for (i in 1: length(extract_all)){
 }
 
 
+#testing glm step 
+glmtest1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[3]] )
+glmtest1
+summary(glmtest1)
+
+glmtest_step<- step(glmtest1, trace = 0, na.action=na.omit)
+summary(glmtest_step) #ok 
+
+#testing standardise coeffs
+
+
+
+#testing gam step 
+gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5), family=nb(), data=extract_all[[3]])
+summary(gam1)
+
+#remove lat lon col
+abundance<-extract_all[[3]]$abundance
+abundance<-as.data.frame(abundance)
+
+
+#make df for loop to fill 
+gam_step_table<-data.frame(summary(gam1)$s.table)
+out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
+
+#set up formula to change 
+
+form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5)", sep=""))
+
+for(g in out_varib)
+{
+  g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
+  
+  if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
+  if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
+  if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
+  if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
+  
+  gam2 <-gam(form_g1, data=extract_all[[3]],  family=nb(), na.action=na.omit)
+  
+  if(AIC(gam2)<=AIC(gam1)){form<-form_g1
+  print(paste(g, " dropped", sep=""))}
+}
+
+gam_final <-gam(form, data=extract_all[[3]],  family=nb(), na.action=na.omit)
+
+summary(gam_final)
+AIC(gam_final)
+AIC(gam1)
+
+
+
 #create models 
 #now model in loop with 15% test 85% training (n=5)
 
@@ -438,16 +538,56 @@ models_all<- function(data){
   rmse_all<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, RFP=1) 
 
 for (i in 1:100){
+  tryCatch( {
   
-  #define test and training data
+  #define test and training data   ---------- problem with drop- if no variables are significant it removes them all! need to check thisss.
   test<- data[sample(nrow(data), size=5, replace=FALSE),]  
   train<- data[(! row.names(data) %in% row.names(test)), ]
   
   obvs<-test$abundance
   
   #make models
-  glm1<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=train, family=poisson() )
-  gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5), family=poisson() , data=train)  #family=nb(theta=NULL, link="log")
+  
+  #GLM
+  glm1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=train, na.action = na.omit )
+  glm1<- step(glmtest1, trace = 0, na.action=na.omit)
+  
+  
+  #GAM
+  gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5), family=nb() , data=train)  
+  #extract abundance 
+  abundance<-train$abundance
+  abundance<-as.data.frame(abundance)
+  
+  
+  #make df for loop to fill 
+  gam_step_table<-data.frame(summary(gam1)$s.table)
+  out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
+  
+  #set up formula to change 
+  form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5)", sep=""))
+  
+  #run step loop 
+  for(g in out_varib)
+  {
+    g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
+    
+    if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
+    if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
+    if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
+    if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
+    
+    gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
+    
+    if(AIC(gam2)<=AIC(gam1)){form<-form_g1
+    print(paste(g, " dropped", sep=""))}
+  }
+  
+  gam1 <-gam(form, data=train,  family=nb(), na.action=na.omit)
+  
+  
+  #rf 
+  
   rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
                       BO2_chlomean_ss, data=train, ntree=300, importance=TRUE   )
   
@@ -466,7 +606,11 @@ for (i in 1:100){
   rmse_all[i,4]<-cor(obvs, prglm, method = c("pearson"))
   rmse_all[i,5]<-cor(obvs, prgam, method = c("pearson"))
   rmse_all[i,6]<-cor(obvs, prRF, method = c("pearson"))
+  
+  print(i)
 
+} , error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+  
 }
   
   return(rmse_all) 
@@ -477,6 +621,43 @@ for (i in 1:100){
 allrmse<-lapply(extract_all, models_all)
 
 
+#testing the models
+glmtest1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[1]] )
+glmtest1
+summary(glmtest1)
+
+glmtest2<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[2]] )
+glmtest2
+summary(glmtest2)
+
+glmtest3<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[3]] )
+glmtest3
+summary(glmtest3)
+
+glmtest4<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[4]])
+glmtest4
+summary(glmtest4)
+
+glmtest5<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[5]])
+glmtest5
+summary(glmtest5)
+
+glmtest6<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[6]] )
+glmtest6
+summary(glmtest6)
+
+
+glmtest7<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[7]])
+glmtest7
+summary(glmtest7)
+
+glmtest8<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[8]] )
+glmtest8
+summary(glmtest8)
+
+glmtest9<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[9]])
+glmtest9
+summary(glmtest9)
 
 #get averages as it didnt work 
 
@@ -502,6 +683,12 @@ for (i in 1: length(averages)){
 
 old_averages<-averages.df
 
+#plot group abundances
+par(mfrow=c(3,3))
+for (i in 1:length(group_list)){
+  hist(group_list[[i]]$abundance, main=i)
+}
+
 
 #averages pearsons 
 average_p<-function(data){
@@ -518,11 +705,9 @@ average_p<-function(data){
 
 average_pear<-lapply(allrmse, average_p)
 
-average_pear[[1]]
-average_pear[[2]]
-average_pear[[3]]
-average_pear[[4]]
-average_pear[[5]]
+for (i in 1: length(average_pear)){
+print(  average_pear[[i]])
+}
 
 
 
