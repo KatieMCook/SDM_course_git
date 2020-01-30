@@ -165,6 +165,98 @@ crs(japan_outline)
 RCP85_2050<-mask(RCP85_2050, predict_area)
 RCP26_2050<-mask(RCP26_2050, predict_area)
 
+
+#standardise coefficients 
+#now write loop to standardise all 
+
+#length(area_pred)
+
+#par(mfrow=c(2,2))
+
+
+#standard<- function(data){
+  #stand_dat<-(data[]-mean(data[], na.rm=TRUE))
+  #return(stand_dat)
+  
+#}
+
+
+
+#for (i in 1:nlayers(area_pred)){
+  stand_ras<-standard(area_pred[[i]])
+  
+  test_ras<-area_pred[[i]]
+  
+  test_ras[]<-stand_ras[]
+  
+  assign(paste0('stand_', i), test_ras)
+  
+}
+
+#plot()
+
+##stand_stack<-stack(stand_1, stand_2, stand_3, stand_4, stand_5)  #issue the mean of bottom light is so low, potentially cut out closer to the coast? carry on for now
+
+#names(stand_stack)
+
+#par(mfrow=c(3,2))
+
+#plot(stand_stack)
+
+#plot(area_pred)
+
+#mean(area_pred[[4]][], na.rm=TRUE)
+
+#par(mfrow=c(1,1))
+#plot(stand_4)
+#plot(area_pred[[4]])
+
+#stand_stack<-current_preds
+
+#ok now standardise future 
+#RCP26
+#for (i in 1:nlayers(RCP26_2050)){
+  stand_ras<-standard(RCP26_2050[[i]])
+  
+  test_ras<-RCP26_2050[[i]]
+  
+  test_ras[]<-stand_ras[]
+  
+  assign(paste0('stand_', i), test_ras)
+  
+}
+
+
+#RCP26_2050<-stack(stand_1, stand_2, stand_3, stand_4, stand_5)
+
+#(stand_stack)
+
+#plot(RCP26_2050)
+
+#RCP85_2050
+
+#for (i in 1:nlayers(RCP85_2050)){
+  stand_ras<-standard(RCP85_2050[[i]])
+  
+  test_ras<-RCP85_2050[[i]]
+  
+  test_ras[]<-stand_ras[]
+  
+  assign(paste0('stand_', i), test_ras)
+  
+}
+
+
+#RCP85_2050<-stack(stand_1, stand_2, stand_3, stand_4, stand_5)
+
+#names(stand_stack)
+
+#plot(RCP85_2050)
+
+
+
+
+
 #ok now get algae data (cleaned from algae_sdm script)
 algae_all<-read.csv('algae_FG_site_abun.csv')
 algae_all<-algae_all[,-1]
@@ -241,9 +333,9 @@ extract_km<-function(data){
 
 extract_all<-lapply(group_list, extract_km)
 
-#create models 
-#now model in loop with 15% test 85% training (n=5)
-
+#create models ----
+#now model in loop with 15% test 80% training (n=6)
+library(MASS)
 
 
 models_all<- function(data){
@@ -251,17 +343,55 @@ models_all<- function(data){
   rmse_all<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, RFP=1)  
 
   
-  for (i in 1:100){
-    
+  for (i in 1:1000){
+    tryCatch( {
     #define test and training data
-    test<- data[sample(nrow(data), size=5, replace=FALSE),]  
+    test<- data[sample(nrow(data), size=6, replace=FALSE),]  
     train<- data[(! row.names(data) %in% row.names(test)), ]
     
     obvs<-test$abundance
     
     #make models
-    glm1<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss +BO2_lightbotltmax_bdmin  , family=poisson, data=train)
-    gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5) + s( BO2_lightbotltmax_bdmin, k=5 ), family=poisson, data=train)
+    
+    ##GLM
+    glm1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss +BO2_lightbotltmax_bdmin, data=train)
+    glm1<- step(glm1, trace = 0, na.action=na.omit)
+    
+    ##GAM
+    gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5), family=nb(), data=train)
+    
+    abundance<-train$abundance
+    abundance<-as.data.frame(abundance)
+    
+    
+    #make df for loop to fill 
+    gam_step_table<-data.frame(summary(gam1)$s.table)
+    out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
+    
+    #set up formula to change 
+    form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5)", sep=""))
+    
+    #run step loop 
+    for(g in out_varib)
+    {
+      g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
+      
+      if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
+      if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
+      if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
+      if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
+      if(g_temp=="s(BO2_lightbotltmax_bdmin, k=5)"){form_g1<-update(form, ~. -s(BO2_lightbotltmax_bdmin, k=5))}
+      
+      gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
+      
+      if(AIC(gam2)<=AIC(gam1)){form<-form_g1
+      print(paste(g, " dropped", sep=""))}
+    }
+    
+    gam1 <-gam(form, data=train,  family=nb(), na.action=na.omit)
+    
+    
+    #RF
     rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss +BO2_lightbotltmax_bdmin +
                         BO2_chlomean_ss, data=train, ntree=300, importance=TRUE   )
     
@@ -280,30 +410,41 @@ models_all<- function(data){
    rmse_all[i,4]<-cor(obvs, prglm, method = c("pearson"))
   rmse_all[i,5]<-cor(obvs, prgam, method = c("pearson"))
    rmse_all[i,6]<-cor(obvs, prRF, method = c("pearson"))
-  }
+   
+   plot(obvs~prglm)
+   print(i)
+   
+    } , error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+    
+   }
   
   return(rmse_all) 
 
   
 }
 
+#run the models 
 allrmse<-lapply(extract_all, models_all)
-allrmse[[1]]
+
+
+
+
+
 
 #5 is weird? 
 allrmse[[5]]
 extract_all[[5]]  #only present in 5 sites? how do I get around this 
 
-allrmse[[4]]
+allrmse[[4]]       #5 and 4 are issues#?
 extract_all[[4]]
 
 #get averages RMSE
 
 average_km<-function(data){
   
-  glm_av<- mean(data$glmR)
-  gam_av<-mean(data$gamR)
-  rf_av<-mean(data$rfR)
+  glm_av<- mean(data$glmR , na.rm=TRUE)
+  gam_av<-mean(data$gamR, na.rm=TRUE)
+  rf_av<-mean(data$rfR, na.rm=TRUE)
   
   averages<-data.frame(glm_av, gam_av, rf_av)
   
@@ -313,11 +454,11 @@ average_km<-function(data){
 
 averages<-lapply(allrmse, average_km)
 
-averages[[1]]
-averages[[2]]
-averages[[3]]
-averages[[4]]
-averages[[5]]
+averages.df<-data.frame(glm=1, gam= 1, rf=1)
+
+for (i in 1: length(averages)){
+  averages.df[i,]<-(averages[[i]])
+}
 
 
 #averages pearsons 
@@ -335,53 +476,125 @@ average_p<-function(data){
 
 average_pear<-lapply(allrmse, average_p)
 
-average_pear[[1]]
-average_pear[[2]]
-average_pear[[3]]
-average_pear[[4]]
-average_pear[[5]]
+
+averages_pear.df<-data.frame(glm=1, gam= 1, rf=1)
+
+for (i in 1: length(average_pear)){
+  averages_pear.df[i,]<-(average_pear[[i]])
+}
+
+
+#problem. how do we get around lack of data?!
 
 #gam is actually ok, use #no wait actuakky they massively overfit,,, get rid of them 
 
-#full model, predict and ensemble   #loop
+
+
+
+
+###full model, predict and ensemble   #loop
 
 for (i in 1:length(extract_all)) {
+ 
+  #GLM 
+  glm_gr<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss + BO2_lightbotltmax_bdmin,  data=extract_all[[i]])
+  glm_gr<-step(glm_gr, trace = 0, na.action=na.omit)
   
-  glm_gr<-glm(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , family=poisson, data=extract_all[[i]])
- # gam_gr<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5) + s( BO2_lightbotltmax_bdmin, k=5 ), family=poisson, data=extract_all[[i]])
+  
+  #GAM
+  gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5), family=nb(), data=extract_all[[i]])
+  
+  #extract abundance 
+  abundance<-extract_all[[i]]$abundance
+  abundance<-as.data.frame(abundance)
+  
+  
+  #make df for loop to fill 
+  gam_step_table<-data.frame(summary(gam1)$s.table)
+  out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
+  
+  #set up formula to change 
+  form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5)", sep=""))
+  
+  #run step loop 
+  for(g in out_varib)
+  {
+    g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
+    
+    if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
+    if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
+    if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
+    if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
+    if(g_temp=="s(BO2_lightbotltmax_bdmin, k=5)"){form_g1<-update(form, ~. -s(BO2_lightbotltmax_bdmin, k=5))}
+    
+    gam2 <-gam(form_g1, data=extract_all[[i]],  family=nb(), na.action=na.omit)
+    
+    if(AIC(gam2)<=AIC(gam1)){form<-form_g1
+    print(paste(g, " dropped", sep=""))}
+  }
+  
+  gam_gr<-gam(form, data=extract_all[[i]],  family=nb(), na.action=na.omit)  
+  
+  
+  
+  #RF
   rf_gr<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
-                        BO2_chlomean_ss, data=extract_all[[i]], ntree=300, importance=TRUE   )
+                        BO2_chlomean_ss + BO2_lightbotltmax_bdmin, data=extract_all[[i]], ntree=300, importance=TRUE   )
   
   assign(paste0('glm_gr', i), glm_gr)
- # assign(paste0('gam_gr', i), gam_gr)
+ assign(paste0('gam_gr', i), gam_gr)
   assign(paste0('rf_gr', i), rf_gr)
   
   pr_glm<-predict(area_pred, glm_gr)
-#  pr_gam<-predict(area_pred, gam_gr)
+pr_gam<-predict(area_pred, gam_gr)
   pr_rf<-predict(area_pred, rf_gr)    
   
   assign(paste0('pr_glm_gr', i), pr_glm)
- # assign(paste0('pr_gam_gr', i), pr_gam)
+ assign(paste0('pr_gam_gr', i), pr_gam)
   assign(paste0('pr_rf_gr', i), pr_rf)
   
-  props<-data.frame(glmR=1, rfR=1, glmP=1, rfP=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
-
-  props[1,3]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,3]))
-  props[1,4]<-abs(average_pear[[i]][1,3])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,3]))
+  #make the ensemble model from RMSE and Pearsons proportions 
+  props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
+  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,2]<-1-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,3]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
   
-  props<-data.frame(glm=((props[1,1]+props[1,3])/(props[1,1]+props[1,2]+props[1,3]+props[1,4])), 
-                    rf=((props[1,2]+props[1,4])/(props[1,1]+props[1,2]+props[1,3]+props[1,4])))
+  props[1,4]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
+  props[1,5]<-abs(average_pear[[i]][1,2])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
+  props[1,6]<-abs(average_pear[[i]][1,3])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
+  
+  props<-data.frame(glm=((props[1,1]+props[1,4])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])), 
+                    gam=((props[1,2]+props[1,5])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])),
+                    rf=((props[1,3]+props[1,6])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])))
   
   assign(paste0('prop_gr', i), props)
   
-  ensemble<- ((pr_glm*props[1,1])+(pr_rf*props[1,2]))
+  ensemble<- ((pr_glm*props[1,1])+(pr_gam*props[1,2])+ (pr_rf*props[1,3]))
   
   assign(paste0('ensemble_gr', i), ensemble)
   
-  
 }
+
+#look at models 
+summary(glm_gr1)
+summary(gam_gr1)
+print(rf_gr1)
+importance(rf_gr1)
+
+summary(glm_gr2)
+summary(gam_gr2)
+print(rf_gr2)
+
+summary(glm_gr3)
+summary(gam_gr3)
+print(rf_gr3)
+
+summary(glm_gr4)
+summary(gam_gr4) #bad
+
+summary(glm_gr5) #also bad 
+summary(gam_gr5) #p value is 1 lol    #problem is this are the subtropical species... hmmmmmmmm
+print(rf_gr5)
 
 #plot ensembles
 library(viridis)
