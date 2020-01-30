@@ -1,4 +1,5 @@
-#mollusc script
+#SDM Practise##
+jan
 
 library(sdmpredictors)
 library(dismo)
@@ -19,6 +20,8 @@ library(ggmap)
 library(ggplot2)
 library(raster)
 library(randomForest)
+library(mgcv)
+library(MASS)
 
 setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
 
@@ -27,18 +30,6 @@ japan_outline<-readOGR('plotting/japan_outline.shp')
 
 #check
 plot(japan_outline)
-
-
-##explore the data 
-marine_layers<- list_layers(marine=TRUE)
-
-
-#list layers from bio-oracle
-layers.bio2 <- list_layers( datasets="Bio-ORACLE" ) 
-
-#explore future layers 
-future_layers<-list_layers_future( marine = TRUE)
-
 
 #extract data 
 current_preds<-load_layers(c('BO_sstmin','BO2_curvelmax_ss', 'BO2_salinitymean_ss'))
@@ -61,7 +52,6 @@ write.csv(site_group_lat, 'site_group_lat.csv')
 # Determine geographic extent of our data
 max.lat <- ceiling(max(latlon$lat)+0.5)
 min.lat <- floor(min(latlon$lat)-0.5)
-
 max.lon <- ceiling(max(latlon$lon)+0.5)
 min.lon <- floor(min(latlon$lon)-0.5)
 geographic.extent <- extent(x = c(min.lon, max.lon, min.lat, max.lat))
@@ -117,6 +107,7 @@ plot(RCP26_2050)
 
 
 
+
 #read in predict area
 predict_area<-readOGR('plotting/japan_predictarea.shp')
 
@@ -152,12 +143,15 @@ plot(area_pred[[1]])
 
 plot(japan_outline, add=TRUE)
 
+points(group1, col='red')
+
 crs(japan_outline)
 
 future_preds<-mask(RCP85_2050, predict_area)
 
 RCP85_2050<-mask(RCP85_2050, predict_area)
 RCP26_2050<-mask(RCP26_2050, predict_area)
+
 
 #standardise coefficients
 #standard<- function(data){
@@ -166,7 +160,9 @@ RCP26_2050<-mask(RCP26_2050, predict_area)
   
 }
 
-#now standardise co-efficients 
+
+
+#now write loop to standardise all 
 #length(area_pred)
 
 #par(mfrow=c(2,2))
@@ -182,8 +178,14 @@ RCP26_2050<-mask(RCP26_2050, predict_area)
   
 }
 
+#plot()
 
-#current_preds<-stack(stand_1, stand_2, stand_3, stand_4)
+#stand_stack<-stack(stand_1, stand_2, stand_3, stand_4)
+
+#names(stand_stack)
+
+#plot(stand_stack)
+
 
 #ok now standardise future 
 #RCP26
@@ -199,8 +201,9 @@ RCP26_2050<-mask(RCP26_2050, predict_area)
 }
 
 
-#<RCP26_2050-stack(stand_1, stand_2, stand_3, stand_4)
+#RCP26_2050<-stack(stand_1, stand_2, stand_3, stand_4)
 
+#names(stand_stack)
 
 #plot(RCP26_2050)
 
@@ -220,199 +223,299 @@ RCP26_2050<-mask(RCP26_2050, predict_area)
 
 #RCP85_2050<-stack(stand_1, stand_2, stand_3, stand_4)
 
+#names(stand_stack)
+
 #plot(RCP85_2050)
 
 
 
 
-#now get mollusc data----
-#DO Molls
 
-molls<-read.csv('Species_database_Molls.csv')
+#ok now get data
+#Fish data
+fish_data<-read.csv('FishData_JP_2016_final.csv')
 
-molls<-molls[,c(1,4,5,8)]
+fish_data<-fish_data[1:7533,1:9]
 
-molls_name<-data.frame(unique(molls$Name))
+fish_survey<-fish_data
 
-write.csv(molls_name, 'molls_name.csv')
+fish_survey$SpeciesFish<-as.character(fish_survey$SpeciesFish)
 
-molls_name_id<-read.csv('SiteID_Name_molls.csv')
-
-molls<-left_join(molls, molls_name_id, by='Name')
-
-
-#remove blank rows
-molls<- molls[!apply(molls == "", 1, all),]
-
-#remove site name
-molls<-molls[,-1]
-
-#check class
-sapply(molls, class)
-
-molls$Number<-as.numeric(molls$Number)
+#make sure fish names are correct
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=="Apogon aureus"]<- "Ostorhinchus aureus"
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=='PLectroglyphidodon dickii']<-'Plectroglyphidodon dickii'
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=='Goniistius zebra']<-'Cheilodactylus zebra'
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=='Diagramma picta']<-'Diagramma pictum'
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=='Goniistius zonatus']<-'Cheilodactylus zonatus'
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=='Halichoeres poecilopterus']<-'Parajulis poecilepterus'
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=='Sebasticus marmoratus']<-'Sebastiscus marmoratus'
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=="Apogon doederleini"]<-'Ostorhinchus doederleini'
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=='Siganus stellatus']<-'Siganus punctatus'
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=="Apogon limenus"]<-'Ostorhinchus limenus'
+fish_survey$SpeciesFish[fish_survey$SpeciesFish=="Chaetodon modestus"]<-'Roa modesta'
 
 
-#combine by transect
-molls<-molls %>% group_by(SiteID, SpeciesFish) %>% summarise(number=mean(Number))
+#ok now all names ok 
+
+#merge with functional groups
+fgroup<-read.csv('fishtraitgroups_2301.csv')
+
+fgroup$Species<-as.character(fgroup$Species)
+
+fgroup<-fgroup[,c(1,15)]
+
+names(fgroup)<-c('Species', 'group'  )
+
+names(fish_survey)<-c("SiteID" ,     "Name"   ,     "Year"  ,      "Date"    ,    "Transect"   , "Species", "Number" ,     "SizeCm"  ,    "B_g" ) 
+
+##old FGS remvoved group 4
+#fgroup<-fgroup[-c(which(fgroup$group==4)),]
+
+#fgroup$group[fgroup$group==10]<-4  ##only one in group 4, remove and make 10s 4
+
+#which(fgroup$group==4)
+
+#remove group 5 and 12 (only 1 species in each and replace with group 13 and 14)
+fgroup<-fgroup[-c(which(fgroup$group==5)),]
+fgroup$group[fgroup$group==13]<-5
+
+fgroup<-fgroup[-c(which(fgroup$group==12)),]
+fgroup$group[fgroup$group==14]<-12
 
 
-#make matrix
-molls_matrix<-acast(molls, SiteID~SpeciesFish,value.var='number')
+#merge
+func_group_all<-left_join(fish_survey, fgroup, by='Species')
 
-#make NAs 0
-molls_matrix[is.na(molls_matrix)] <- 0
+nasp<-which(is.na(func_group_all$group)) #nothing missing 
+unique(func_group_all[c(nasp),6]) #missing FGs nothing missing
 
-#convert back to df
-molls<-melt(molls_matrix)
+which( !(fgroup$Species %in% unique(func_group_all$Species)))
 
-# now add lat lon
-latlon<-read.csv('JP_waypoints.csv')
+#remove "Cheilodipterus artus" "Aetobatus narinari" as these made groups 5 and 12
+torm<-which(is.na(func_group_all$group))
+func_group_all<-func_group_all[-c(torm),]
 
+#old groups these were missing 
+#fgroup[184,]  #scarus psittacus/ spinus sp group 3
+
+#func_group_all$group[func_group_all$Species == "Scarus spinus"]<-fgroup$group[fgroup$Species=='Scarus psittacus/spinus']
+#func_group_all$group[func_group_all$Species == "Scarus psittacus"]<-fgroup$group[fgroup$Species=='Scarus psittacus/spinus']
+
+#which(func_group_all$Species=="Ostracion immaculatus")
+#which(func_group_all$Species=="Roa modesta")
+
+torm<-which(is.na(func_group_all$group)) #empty
+#func_group_all<-func_group_all[-c(torm),]
+
+#remove unesessary columns and summarise by site, transect, species
+func_group_all<- func_group_all[, c(1,5,7,10)]
+
+fgroup_site<-func_group_all %>% group_by(SiteID, group,Transect ) %>% summarise(abundance=sum(Number) )
+
+fgroup_site<-fgroup_site %>% group_by(SiteID, group) %>% summarise(abundance=mean(abundance))
+
+##rename cols
+names(fgroup_site)<- c('Site', 'group', 'abundance')
+
+fgroup_site$Site<-as.character(fgroup_site$Site)
+
+
+#add zeros (by making a matrix and making NA values 0 and converting back)
+site_group_matrix<-acast(fgroup_site, Site~group, value.var='abundance')
+
+which(is.na(site_group_matrix))
+site_group_matrix[which(is.na(site_group_matrix))]<-0
+
+fgroup_site<-melt(site_group_matrix, value.name = 'abundance')
+
+names(fgroup_site)<-c('Site', 'group', 'abundance')
+
+#add lat lon data to obs
 latlon<-latlon[,c(2,3,4)]
 
-names(latlon)<-c('lat','lon','SiteID')
-
-names(molls)<-c('SiteID', 'species', 'abundance')
-
-molls<-left_join(molls, latlon, by='SiteID')
+latlon$Site<-as.character(latlon$Site)
 
 
-#now just need to add group data by species and then merge
-groups<-read.csv('mollusc_clust1107.csv')
+#merge lat lon and functional group data
 
-survey_sp<-unique(molls$species)
-survey_sp<-as.character(survey_sp)
-
-trait_sp<-unique(groups$Mollusc.Species)
-trait_sp<-as.character(trait_sp)
-
-#check match
-survey_unmatch<-  survey_sp[which(! survey_sp %in% trait_sp)]
-trait_unmatch<-trait_sp[which(! trait_sp %in% survey_sp)]
-
-survey_unmatch
-trait_unmatch
-
-molls$species<-as.character(molls$species)
-molls$species[molls$species=='Astralium rhodostoma']<-"Astralium rhodostomum"
-molls$species[molls$species=="Drupella conus"]<-"Drupella cornus"
-molls$species[molls$species=="Fryeria menindie"]<-'Phyllidia picta'
-molls$species[molls$species=="Gaza sericata"]<-  'Callogaza sericata'
-molls$species[molls$species== "Tridacna crosea" ]<-  "Tridacna crocea" 
-  
-groups$Mollusc.Species<-as.character(groups$Mollusc.Species)
-groups$Mollusc.Species[groups$Mollusc.Species=="Fryeria menindie > accepted as Phyllidia picta"]  <-'Phyllidia picta'
-groups$Mollusc.Species[groups$Mollusc.Species=="Gaza sericata (Now Callogaza sericata)"]  <-'Callogaza sericata'
-
-
-survey_sp<-unique(molls$species)
-survey_sp<-as.character(survey_sp)
-
-trait_sp<-unique(groups$Mollusc.Species)
-trait_sp<-as.character(trait_sp)
-
-survey_unmatch<-  survey_sp[which(! survey_sp %in% trait_sp)]
-trait_unmatch<-trait_sp[which(! trait_sp %in% survey_sp)]
-
-survey_unmatch
-trait_unmatch
-
-
-#now delete the survey species without traits
-
-for (i in 1:length(survey_unmatch)){
-  torm<-which(molls$species== survey_unmatch[i])
-  molls<-molls[-torm,]
+for (i in 1:nrow(fgroup_site)){
+  for (j in 1:nrow(latlon)){
+    
+    if (fgroup_site[i, 1] == latlon[j, 3]) {
+      fgroup_site[i, 4]<- latlon[j, 1]
+      fgroup_site[i, 5]<-latlon[j, 2]
+      
+    }
+  }
 }
 
 
-survey_sp<-unique(molls$species)
-survey_sp<-as.character(survey_sp)
+#add names
+names(fgroup_site)
 
-trait_sp<-unique(groups$Mollusc.Species)
-trait_sp<-as.character(trait_sp)
-
-survey_unmatch<-  survey_sp[which(! survey_sp %in% trait_sp)]
-trait_unmatch<-trait_sp[which(! trait_sp %in% survey_sp)]
-
-survey_unmatch  
-trait_unmatch
+names(fgroup_site)<-c( "Site"  ,    "group"  ,   "abundance" , "lat"    ,    "lon" )
 
 
-#ok #now merge
-names(groups)
-groups<-groups[,c(2,13,14,15)]
+### PLOTS FOR PRESENTATION
+#make group a factor
+fgroup_site$group<-as.factor(fgroup_site$group)
 
-names(groups)<-c('species', 'group_k2', 'group_k7', 'group_k10')
+#plot functional groups by lat and lon (by abundance)
 
-moll_groups<-left_join(molls, groups, by='species')
-
-names(moll_groups)
-k2_site<-moll_groups %>% group_by(SiteID, lat, lon, group_k2) %>% summarise(abundance=sum(abundance))
-
-k7_site<-moll_groups %>% group_by(SiteID, lat, lon, group_k7) %>% summarise(abundance=sum(abundance))
-k10_site<-moll_groups %>% group_by(SiteID, lat, lon, group_k10) %>% summarise(abundance=sum(abundance))
-
-k2_site$group_k2<-as.factor(k2_site$group_k2)
-k7_site$group_k7<-as.factor(k7_site$group_k7)
-k10_site$group_k10<-as.factor(k10_site$group_k10)
-
-ggplot(k2_site, aes(x=lat, y=abundance, col=group_k2))+
+ggplot(fgroup_site, aes(x=lat, y=abundance, col=group))+
   geom_point()+
-  geom_smooth(method='lm')
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Abundance')+
+  facet_wrap(~group, scales = 'free')
 
-ggplot(k7_site, aes(x=lat, y=abundance, col=group_k7))+
-  geom_point()+
-  geom_smooth(method='lm', se = FALSE)
+#plot by proportion
+fgroup_site_prop<- fgroup_site %>% group_by(Site, lat, lon) %>% mutate(total_abun= sum(abundance)) %>% mutate(prop= abundance/total_abun)
 
-ggplot(k10_site, aes(x=lat, y=abundance, col=group_k10))+
-  geom_point()+
-  geom_smooth(method='lm', se = FALSE)
-
-#plot proportion of community 
-k7_site_prop<- k7_site %>% group_by(SiteID, lat, lon) %>% mutate(total_abun= sum(abundance)) %>% mutate(prop= abundance/total_abun)
-
-names(k7_site_prop)
-k7_site_prop<- k7_site_prop %>% rename(group=group_k7)
-
-ggplot(k7_site_prop, aes(x=lat, y=prop, col=group))+
+ggplot(fgroup_site_prop, aes(x=lat, y=prop, col=group))+
   geom_point()+
   geom_smooth(method='lm', se=FALSE)+
   labs(x='Latitude', y='Proportion of Community')+
-  theme_bw()+
+  theme_light()+
   ylim(0,0.7)
 
 
-#go with 7 for now 
-#split into 7 dfs 
-for (i in 1:length(unique(k7_site$group_k7))){
-  rows<-which(k7_site$group_k7==i)
-  assign(paste0("Obvs_gr_", i), data.frame(k7_site[rows,]))
+for (i in 1: length(unique(fgroup_site_prop$group))){
+  filter_group<-filter(fgroup_site_prop, group==i) 
+  assign(paste0 ('group_prop_lat_', i), filter_group)
+}
+
+ggplot(group_prop_lat_1, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 1')+
+  theme_light()+
+  ylim(0, 0.7)
+
+
+ggplot(group_prop_lat_2, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 2')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_3, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 3')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_4, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 4')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_5, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 5')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_6, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 6')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_7, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 7')+
+  theme_light()+
+  ylim(0, 0.7)
+
+
+ggplot(group_prop_lat_8, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 8')+
+  theme_light()+
+  ylim(0, 0.7)
+
+
+ggplot(group_prop_lat_9, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 9')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_10, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 10')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_11, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 11')+
+  theme_light()+
+  ylim(0, 0.7)
+
+ggplot(group_prop_lat_12, aes(x=lat, y=prop))+
+  geom_point()+
+  geom_smooth(method='lm', se=FALSE)+
+  labs(x='Latitude', y='Proportion of Community', title='Group 11')+
+  theme_light()+
+  ylim(0, 0.7)
+
+
+par(mfrow=c(1,1))
+par(mar=c(3,2,2,2))
+#plot to check MAP
+# Plot the base map
+plot(japan_outline, 
+     xlim = c(min.lon, max.lon),
+     ylim = c(min.lat, max.lat),
+     col = "grey95",
+     axes = TRUE
+)
+
+crs(japan_outline)
+# Add the points for individual observation
+points(x = fgroup_site$lon, 
+       y = fgroup_site$lat, 
+       col = "red", 
+       pch = 20, 
+       cex = 0.75)
+# And draw a little box around the graph
+box()
+
+
+
+#check for NA group site
+#which(is.na(fgroup_site$group)) #223
+#fgroup_site<-fgroup_site[-223,]
+
+
+
+#split data by functional group 
+for (i in 1:length(unique(fgroup_site$group))){
+  rows<-which(fgroup_site$group==i)
+  assign(paste0("Obvs_gr_", i), data.frame(fgroup_site[rows,]))
 }
 
 
-#loop all groups ----
 
-
-v1<-vifstep(current_preds, th=10) #nothing got rid of
-v1
-
-library(lme4)
-library(mgcv)
-library(gamm4)
-library(MASS)
-
-rmse.bootstrap<-data.frame('glm'=1, 'glmer'=1, 'gam'=1, numbertest=1)
+##now run loop for alllllllll ----
 
 rmse <- function(o,p) {
   e <- o - p
   sqrt(mean(e^2,na.rm=T))
 }
 
-
-
-##now run loop for alllllllll ----
 
 #extract the environmental values at lat lons 
 
@@ -430,123 +533,173 @@ extract_km<-function(data){
 
 extract_all<-lapply(group_list, extract_km)
 
-#create models 
-#now model in loop with 15% test 85% training (n=5)   #######START HERE TOMORROW 
+for (i in 1: length(extract_all)){
+  extract_all[[i]]$abundance<-ceiling(extract_all[[i]]$abundance)
+}
+
+
+#testing glm step 
+glmtest1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[3]] )
+glmtest1
+summary(glmtest1)
+
+glmtest_step<- step(glmtest1, trace = 0, na.action=na.omit)
+summary(glmtest_step) #ok 
+
+#testing standardise coeffs
+
+
+
+#testing gam step 
+gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5), family=nb(), data=extract_all[[3]])
+summary(gam1)
+
+#remove lat lon col
+abundance<-extract_all[[3]]$abundance
+abundance<-as.data.frame(abundance)
+
+
+#make df for loop to fill 
+gam_step_table<-data.frame(summary(gam1)$s.table)
+out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
+
+#set up formula to change 
+
+form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5)", sep=""))
+
+for(g in out_varib)
+{
+  g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
+  
+  if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
+  if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
+  if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
+  if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
+  
+  gam2 <-gam(form_g1, data=extract_all[[3]],  family=nb(), na.action=na.omit)
+  
+  if(AIC(gam2)<=AIC(gam1)){form<-form_g1
+  print(paste(g, " dropped", sep=""))}
+}
+
+gam_final <-gam(form, data=extract_all[[3]],  family=nb(), na.action=na.omit)
+
+summary(gam_final)
+AIC(gam_final)
+AIC(gam1)
+
+
+
+#create models ########start here 
+#now model in loop with 15% test 85% training (n=5)
 
 models_all<- function(data){
+
+  rmse_all<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, RFP=1) 
+
+for (i in 1:100){
+  tryCatch( {
   
-  rmse_all<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, RFP=1)  
+  #define test and training data   ---------- problem with drop- if no variables are significant it removes them all! need to check thisss.
+  test<- data[sample(nrow(data), size=6, replace=FALSE),]  
+  train<- data[(! row.names(data) %in% row.names(test)), ]
   
-  for (i in 1:100){
-    tryCatch( {
-      
-    #define test and training data
-    test<- data[sample(nrow(data), size=5, replace=FALSE),]  
-    train<- data[(! row.names(data) %in% row.names(test)), ]
+  obvs<-test$abundance
+  
+  #make models
+  
+  #GLM
+  glm1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=train )
+  glm1<- step(glm1, trace = 0)
+  
+  
+  #GAM
+  gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5), family=nb() , data=train)  
+ 
+   #extract abundance 
+  abundance<-train$abundance
+  abundance<-as.data.frame(abundance)
+  
+  
+  #make df for loop to fill 
+  gam_step_table<-data.frame(summary(gam1)$s.table)
+  out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
+  
+  #set up formula to change 
+  form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5)", sep=""))
+  
+  #run step loop 
+  for(g in out_varib)
+  {
+    g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
     
-    obvs<-test$abundance
+    if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
+    if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
+    if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
+    if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
     
-    #make models
-   
-    #GLM
-    glm1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss ,  data=train)
-    glm1<- step(glm1, trace = 0, na.action=na.omit)
+    gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
     
-    
-    #GAM
-    gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss,k=5), family=nb(), data=train)
-    
-    #extract abundance 
-    abundance<-train$abundance
-    abundance<-as.data.frame(abundance)
-    
-    
-    #make df for loop to fill 
-    gam_step_table<-data.frame(summary(gam1)$s.table)
-    out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
-    
-    #set up formula to change 
-    form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5)", sep=""))
-    
-    #run step loop 
-    for(g in out_varib)
-    {
-      g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
-      
-      if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
-      if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
-      if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
-      if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
-      
-      gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
-      
-      if(AIC(gam2)<=AIC(gam1)){form<-form_g1
-      print(paste(g, " dropped", sep=""))}
-    }
-    
-    gam1 <-gam(form, data=train,  family=nb(), na.action=na.omit)
-    
-    
-    #RF
-    rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
-                        BO2_chlomean_ss, data=train, ntree=300, importance=TRUE   )
-    
-    
-    #predict models for test
-    prglm<-predict( glm1, test)
-    prgam<-predict(gam1, test)
-    prRF<-predict(rf1, test)
-    
-    #now rmse for all
-    rmse_all[i,1]<-rmse(obvs, prglm)
-    rmse_all[i,2]<-rmse(obvs, prgam)
-    rmse_all[i,3]<-rmse(obvs, prRF)
-    
-    #now pearsons correlation for all 
-    rmse_all[i,4]<-cor(obvs, prglm, method = c("pearson"))
-    rmse_all[i,5]<-cor(obvs, prgam, method = c("pearson"))
-    rmse_all[i,6]<-cor(obvs, prRF, method = c("pearson"))
-    
-    print (i)
-    
-    } , error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+    if(AIC(gam2)<=AIC(gam1)){form<-form_g1
+    print(paste(g, " dropped", sep=""))}
   }
-    
   
+  gam1 <-gam(form, data=train,  family=nb(), na.action=na.omit)
+  
+  
+  #rf 
+  
+  rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
+                      BO2_chlomean_ss, data=train, ntree=300, importance=TRUE   )
+  
+  
+  #predict models for test
+  prglm<-predict( glm1, test)
+  prgam<-predict(gam1, test)
+  prRF<-predict(rf1, test)
+  
+  #now rmse for all  
+  rmse_all[i,1]<-rmse(obvs, prglm)
+  rmse_all[i,2]<-rmse(obvs, prgam)
+  rmse_all[i,3]<-rmse(obvs, prRF)
+  
+  #now pearsons correlation for all 
+  rmse_all[i,4]<-cor(obvs, prglm, method = c("pearson"))
+  rmse_all[i,5]<-cor(obvs, prgam, method = c("pearson"))
+  rmse_all[i,6]<-cor(obvs, prRF, method = c("pearson"))
+  
+  print(i)
+
+} , error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+  
+}
   
   return(rmse_all) 
-  
+ 
   
 }
 
-
-#run model for all 
 allrmse<-lapply(extract_all, models_all)
 
-#plot group abundances
-par(mfrow=c(3,3))
-for (i in 1:length(group_list)){
-  hist(group_list[[i]]$abundance, main=i)
-}
 
-
-#test model fit
-glmtest1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[1]])
+#testing the models
+glmtest1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[1]] )
 glmtest1
 summary(glmtest1)
 
 glmtest2<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[2]] )
 glmtest2
 summary(glmtest2)
+
 glmtest3<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[3]] )
 glmtest3
 summary(glmtest3)
 
-glmtest4<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[4]] )
+glmtest4<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[4]])
 glmtest4
 summary(glmtest4)
 
-glmtest5<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[5]] )
+glmtest5<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[5]])
 glmtest5
 summary(glmtest5)
 
@@ -555,13 +708,17 @@ glmtest6
 summary(glmtest6)
 
 
-glmtest7<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[7]] )
+glmtest7<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[7]])
 glmtest7
 summary(glmtest7)
 
+glmtest8<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[8]] )
+glmtest8
+summary(glmtest8)
 
-
-
+glmtest9<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[9]])
+glmtest9
+summary(glmtest9)
 
 #get averages as it didnt work 
 
@@ -577,17 +734,7 @@ average_km<-function(data){
   
 }
 
-
-allrmse[[1]]
 averages<-lapply(allrmse, average_km)
-
-averages[[1]]
-averages[[2]]
-averages[[3]]
-averages[[4]]
-averages[[5]]
-averages[[6]]
-averages[[7]]
 
 averages.df<-data.frame(glm=1, gam= 1, rf=1)
 
@@ -595,6 +742,13 @@ for (i in 1: length(averages)){
   averages.df[i,]<-(averages[[i]])
 }
 
+old_averages<-averages.df
+
+#plot group abundances
+par(mfrow=c(3,3))
+for (i in 1:length(group_list)){
+  hist(group_list[[i]]$abundance, main=i)
+}
 
 
 #averages pearsons 
@@ -618,14 +772,15 @@ for (i in 1: length(average_pear)){
   averages_pear.df[i,]<-(average_pear[[i]])
 }
 
-average_pear[[1]]
-average_pear[[2]]
-average_pear[[3]]
-average_pear[[4]]
-average_pear[[5]]
-average_pear[[6]]
-average_pear[[7]]
+#6 is bad, use normal distribution? 
 
+glmtest6<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss, data=extract_all[[6]] )
+glmtest6
+summary(glmtest6)
+glm_step_6<-step(glmtest6)
+summary(glm_step_6)
+
+#find best model for each and use to predict. 
 
 
 #full model, predict and ensemble   #loop
@@ -668,13 +823,13 @@ for (i in 1:length(extract_all)) {
   }
   
   gam_gr<-gam(form, data=extract_all[[i]],  family=nb(), na.action=na.omit)  
-  
-  
-  
-  
+    
+    
+    
+    
   #RF  
   rf_gr<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
-                        BO2_chlomean_ss, data=extract_all[[i]], ntree=300, importance=TRUE  )
+                         BO2_chlomean_ss, data=extract_all[[i]], ntree=300, importance=TRUE  )
   
   assign(paste0('glm_gr', i), glm_gr)
   assign(paste0('gam_gr', i), gam_gr)
@@ -708,9 +863,11 @@ for (i in 1:length(extract_all)) {
   
   assign(paste0('ensemble_gr', i), ensemble)
   
+ 
   
-  
-}
+ }
+
+
 
 summary(glm_gr1)
 summary(gam_gr1)
@@ -726,7 +883,7 @@ summary(glm_gr4)
 summary(gam_gr4)
 
 
-summary(glm_gr5) #group 5 needs to go 
+summary(glm_gr5) 
 summary(gam_gr5)
 
 
@@ -737,44 +894,46 @@ summary(gam_gr6)
 summary(glm_gr7)
 summary(gam_gr7)
 
-#whats in group 5?
-which(extract_all[[4]]$abundance> 0) #only at 7 sites but significant   -these are issues 
+summary(glm_gr8)
+summary(gam_gr8)
 
-which(extract_all[[7]]$abundance> 0) #only at 5 sites 
+summary(glm_gr9)
 
-which(extract_all[[5]]$abundance> 0) #only at 11 sites but not significant 
+summary(glm_gr10)
+summary(gam_gr10)
 
-par(mfrow=c(2,2))
-plot(extract_all[[4]]$abundance~extract_all[[4]]$BO_sstmin)
-plot(extract_all[[4]]$abundance~extract_all[[4]]$BO2_curvelmax_ss)
-plot(extract_all[[4]]$abundance~extract_all[[4]]$BO2_salinitymean_ss)     
+summary(glm_gr11)
+summary(gam_gr11)
+
+summary(glm_gr12)
+summary(gam_gr12)
 
 #plot ensembles
 library(viridis)
-pal<-viridis(option='plasma', n=40, direction=-1)
+pal <- viridis(n=40, option='plasma', direction=-1)
 
 ens_list<-lapply(ls(pattern="ensemble_gr"),get)
 
-par(mar=c(2,1.5,1.5,1.5))
-par(mfrow=c(3,3))
+par(mar=c(1.2,1.2,1.2,1.2))
+par(mfrow=c(4,3))
 
 for ( i in 1:length(ens_list)){
-  plot(ens_list[[i]], main= paste0('Group ', i), col= pal)
-  plot(japan_outline, add=TRUE, col='light grey')
+  plot(ens_list[[i]], main= paste0('Group ',i), col=pal )
+  plot(japan_outline, add=TRUE, col='grey', border='black')
   box()
 }
 
-#plot tropical subtropical
+#plot trop subtrop example 
 par(mfrow=c(1,2))
-plot(ens_list[[2]], col=pal, main='Group 2')
-plot(japan_outline, col='light grey', add=TRUE)
+plot(fut_ens_list[[1]], col=pal, main='Group 1')
+plot(japan_outline, add=TRUE, col='light grey', border='black')
 box()
-plot(ens_list[[3]], col=pal, main='Group 3')
-plot(japan_outline, add=TRUE, col='light grey')
+plot(fut_ens_list[[9]], col=pal, main='Group 9')
+plot(japan_outline, add=TRUE, col='light grey', border='black')
 box()
 
 
-#now future RCP85
+#now future RCP85----
 rm(glm_gr)
 
 glm_list<-lapply(ls(pattern='glm_gr'), get)
@@ -786,15 +945,15 @@ rm(rf_gr)
 
 rf_list<-lapply(ls(pattern='rf_gr'), get)
 
-
 #make sure the colnames match
 names(RCP85_2050)<-names(current_preds)
+
 
 for (i in 1:length(extract_all)) {
   
   pr_glm_fut<-predict(RCP85_2050, glm_list[[i]])
   pr_gam_fut<-predict(RCP85_2050, gam_list[[i]])
-  pr_rf_fut<-predict(RCP85_2050, rf_list[[i+7]])
+  pr_rf_fut<-predict(RCP85_2050, rf_list[[i+12]])
   
   assign(paste0('glm_fut_85', i), pr_glm_fut)
   assign(paste0('gam_fut_85', i), pr_gam_fut)
@@ -822,16 +981,13 @@ for (i in 1:length(extract_all)) {
   
   
 }
-
 plot(fut_ensemble_85_gr7)
 
 fut_ens85_list<-lapply(ls(pattern='fut_ensemble_85_gr'), get)
 
 
-
-
 #plot
-par(mfrow=c(3,3))
+par(mfrow=c(4,3))
 
 for (i in 1:length(fut_ens85_list)){
   plot(fut_ens85_list[[i]], col=pal, main=paste0('Group', i))
@@ -851,7 +1007,7 @@ for (i in 1:length(extract_all)) {
   
   pr_glm_fut<-predict(RCP26_2050, glm_list[[i]])
   pr_gam_fut<-predict(RCP26_2050, gam_list[[i]])
-  pr_rf_fut<-predict(RCP26_2050, rf_list[[i+7]])
+  pr_rf_fut<-predict(RCP26_2050, rf_list[[i+12]])
   
   assign(paste0('glm_fut_26', i), pr_glm_fut)
   assign(paste0('gam_fut_26', i), pr_gam_fut)
@@ -894,7 +1050,7 @@ for (i in 1:length(fut_ens26_list)){
 }
 
 
-#now get difference between two and plot
+
 #before getting difference standardise abundance between zero and 1 ----
 
 normalize <- function(x) {
@@ -908,9 +1064,6 @@ ens_list_norm<-lapply(ens_list, normalize)
 fut_ens26_norm<-lapply(fut_ens26_list, normalize)
 
 
-
-
-
 #now get difference between two and plot
 #RCP85
 for ( i in 1:length(fut_ens85_norm)){
@@ -921,7 +1074,8 @@ for ( i in 1:length(fut_ens85_norm)){
 
 dif_list85<-lapply(ls(pattern='dif_gr'), get)
 
-par(mfrow=c(3,3))
+par(mar=c(1,1,1,1))
+par(mfrow=c(4,3))
 for (i in 1:length(dif_list85)){
   plot(dif_list85[[i]], main=paste0('Group ', i), col=pal)
   plot(japan_outline, add=TRUE, col='light grey', border='black')
@@ -937,13 +1091,13 @@ for ( i in 1:length(fut_ens26_norm)){
 
 dif_list26<-lapply(ls(pattern='dif_gr'), get)
 
-par(mfrow=c(3,3))
+par(mar=c(1,1,1,1))
+par(mfrow=c(4,3))
 for (i in 1:length(dif_list26)){
   plot(dif_list26[[i]], main=paste0('Group ', i), col=pal)
   plot(japan_outline, add=TRUE, col='light grey', border='black')
   box()
 }
-
 
 
 
@@ -1003,7 +1157,7 @@ dif_mask85<-lapply(ls(pattern='dif85_mask_gr'), get)
 
 plot(dif_mask85[[1]])
 
-par(mfrow=c(3,2))
+par(mfrow=c(3,3))
 
 for (i in 1:length(dif_mask85)){
   plot(dif_mask85[[i]])
@@ -1057,9 +1211,10 @@ dif85_all_df<-do.call(rbind, dif85_values_all)
 
 dif85_all_df$group<-as.factor(dif85_all_df$group)
 
-ggplot(dif85_all_df, aes(x=y, y=values, col=group))+
-  geom_smooth(method='loess', se=FALSE)
-# facet_zoom(ylim=c(-2, 2))  #zooms in on the smaller ones 
+ggplot(dif85_all_df, aes(x=slope, y=values, col=group))+
+  geom_smooth(method='loess', se=FALSE)+
+# facet_zoom(ylim=c(-1, 1.5))+
+  theme_bw()#zooms in on the smaller ones 
 
 
 #RCP 26
@@ -1113,23 +1268,22 @@ dif26_all_df$group<-as.factor(dif26_all_df$group)
 
 
 ggplot(dif26_all_df, aes(x=slope, y=values, col=group))+
-  geom_smooth(method='loess', se=FALSE)
-# facet_zoom(ylim=c(-2, 2))  #zooms in on the smaller ones 
+  geom_smooth(method='loess', se=FALSE)+
+#facet_zoom(ylim=c(-1, 1.6)) +
+  theme_bw()#zooms in on the smaller ones 
 
 #now merge both climate scenarios
 dif_values_all<- rbind(dif85_all_df, dif26_all_df)
 dif_values_all$climate<-as.factor(dif_values_all$climate)
 
 
-ggplot(dif_values_all, aes(x=slope, y=values, col=group))+
+ggplot(dif_values_all, aes(x=y, y=values, col=group))+
   geom_smooth(method='loess', se=FALSE)+
-  facet_wrap(~climate)
+  scale_color_brewer(palette='Paired' )+
+  facet_wrap(~climate)+
+  theme_bw()
 
-write.csv(dif_values_all, 'dif_values_all_molluscs_norm.csv')
-
-
-
-
+write.csv(dif_values_all, 'dif_values_all_fish_jan.csv')
 
 
 
@@ -1152,6 +1306,90 @@ write.csv(dif_values_all, 'dif_values_all_molluscs_norm.csv')
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+#now future 
+rm(glm_gr)
+
+glm_list<-lapply(ls(pattern='glm_gr'), get)
+
+rm(rf_gr)
+
+rf_list<-lapply(ls(pattern='rf_gr'), get)
+
+#make sure the colnames match
+names(future_preds)<-names(current_preds)
+plot(future_preds)
+
+
+for (i in 1:length(extract_all)) {
+  
+  pr_glm_fut<-predict(future_preds, glm_list[[i]])
+  pr_rf_fut<-predict(future_preds, rf_list[[i+9]])
+  
+  assign(paste0('glm_fut', i), pr_glm_fut)
+  assign(paste0('rf_fut', i), pr_rf_fut)
+  
+  props<-data.frame(glm=1, rf=1)
+  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]++averages[[i]][1,3]))
+  props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
+  
+  ensemble_fut<- ((pr_glm_fut*props[1,1])+(pr_rf_fut*props[1,2]))
+  
+  assign(paste0('fut_ensemble_gr', i), ensemble_fut)
+  
+  
+  
+}
+plot(fut_ensemble_gr8)
+
+fut_ens_list<-lapply(ls(pattern='fut_ensemble_gr'), get)
+
+
+#plot
+par(mfrow=c(3,3))
+
+for (i in 1:length(fut_ens_list)){
+  plot(fut_ens_list[[i]])
+}
+
+
+
+#now get difference between two and plot
+for ( i in 1:length(fut_ens_list)){
+ 
+   diff<- fut_ens_list[[i]] - ens_list[[i]]
+  assign(paste0('dif_gr', i), diff)
+}
+
+dif_list<-lapply(ls(pattern='dif_gr'), get)
+
+par(mfrow=c(3,3))
+for (i in 1:length(dif_list)){
+  plot(dif_list[[i]], col=pal, main=paste0('Group ', i))
+  plot(japan_outline, add=TRUE, col='light grey', border='black')
+  box()
+}
+
+#plot trop subtrop example 
+par(mfrow=c(1,2))
+plot(dif_list[[1]], col=pal, main='Group 1')
+plot(japan_outline, add=TRUE, col='light grey', border='black')
+box()
+plot(dif_list[[9]], col=pal, main='Group 9')
+plot(japan_outline, add=TRUE, col='light grey', border='black')
+box()
 
 #ooookkkkk
 #now can find where the areas change the most
@@ -1185,16 +1423,17 @@ plot(decrease_stack)
 #tropical group: 1, 3, 4, 5, 7, 8
 
 #split in tropical and subtropical
-increase_trop_stack<-stack(increase_list[c(3, 7)])
+increase_trop_stack<-stack(increase_list[c(1,3,4,5,7,8)])
+
 plot(increase_trop_stack)
 
-increase_subtrop_stack<-stack(increase_list[c(1,2,4,5,6)])
+increase_subtrop_stack<-stack(increase_list[c(2,6,9)])
 plot(increase_subtrop_stack)
 
-decrease_trop_stack<-stack(decrease_list[c(3,7)])
+decrease_trop_stack<-stack(decrease_list[c(1,3,4,5,7,8)])
 plot(decrease_trop_stack)
 
-decrease_subtrop_stack<-stack(decrease_list[c(1,2,4,5,6)])
+decrease_subtrop_stack<-stack(decrease_list[c(2,6,9)])
 plot(decrease_subtrop_stack)
 
 #where changes the most? values between 0, 1 for increase 
@@ -1206,10 +1445,8 @@ plot(rescale_increase_trop)
 rescale_increase_subtrop<-rescale(increase_subtrop_stack)
 
 trop_increase<-sum(rescale_increase_trop)
-trop_increase<-rescale(trop_increase)
 
 sub_trop_increase<-sum(rescale_increase_subtrop)
-sub_trop_increase<-rescale(sub_trop_increase)
 
 plot(trop_increase)
 plot(japan_outline, add=TRUE)
@@ -1229,7 +1466,6 @@ rescale_decrease_trop<-rescale(decrease_trop_stack)
 
 trop_decrease<-(sum(rescale_decrease_trop)/-1)
 
-par(mfrow=c(1,1))
 plot(trop_decrease) 
 
 decrease_subtrop_stack<-flip(decrease_subtrop_stack)
@@ -1238,35 +1474,49 @@ decrease_subtrop_stack<-stack(decrease_subtrop_stack)
 rescale_decrease_subtrop<-rescale(decrease_subtrop_stack)
 subtrop_decrease<- (sum(rescale_decrease_subtrop)/-1)
 
-subtrop_decrease<-(rescale(subtrop_decrease))/-1
 plot(subtrop_decrease)
+
+#scale between 0 - 1 for all
+trop_increase<-rescale(trop_increase)
+sub_trop_increase<-rescale(sub_trop_increase)
+
+trop_decrease<-(rescale(trop_decrease))/-1
+subtrop_decrease<-(rescale(subtrop_decrease)/-1)
+
+#get rid of the subtrop increase below -1
+sub_trop_increase[sub_trop_increase<0.1]<-NA
 
 library(RColorBrewer)
 library(viridis)
 
-pal<-viridis(option='plasma', n=40, direction=-1)
-palm<-viridis(option='plasma', n=40)
+pal <- viridis(n=40, option='plasma' , direction = -1)
+palm<-viridis(n=40, option='plasma' )
+
 
 par(mfrow=c(1,2))
 plot(trop_increase, main='Tropical FG Increase', col=pal)
-plot(japan_outline, col='light grey' , add=TRUE)
+plot(japan_outline, border='light grey', col='light grey', add=TRUE)
 box()
+
 plot(sub_trop_increase, main='Subtropical FG Increase', col=pal)
-plot(japan_outline, col='light grey', add=TRUE)
+plot(japan_outline, add=TRUE, border='light grey', col='light grey')
 box()
 
 par(mfrow=c(1,2))
-plot(trop_decrease,  main='Tropical FG Decrease', col=palm)
-plot(japan_outline, add=TRUE, col='light grey')
-box()
-plot(subtrop_decrease, col=palm, main='Subtropical FG Decrease')
-plot(japan_outline, add=TRUE, col='light grey')
+plot(trop_decrease, main='Tropical FG Decrease', col=palm)
+plot(japan_outline, border='light grey', col='light grey', add=TRUE)
 box()
 
-writeRaster(trop_increase, 'change_hotspots/molls_trop_increase.tif', format='GTiff')
-writeRaster(sub_trop_increase, 'change_hotspots/molls_subtrop_increase.tif', format='GTiff')
-writeRaster(trop_decrease, 'change_hotspots/molls_trop_decrease.tif', format='GTiff')
-writeRaster(subtrop_decrease, 'change_hotspots/molls_subtrop_decrease.tif', format='GTiff')
+plot(subtrop_decrease, main='Subtropical FG Decrease', col=palm)
+plot(japan_outline, add=TRUE, border='light grey', col='light grey')
+box()
+
+
+#now write raster 
+writeRaster(trop_increase, 'change_hotspots/fish_trop_increase.tif', format='GTiff')
+writeRaster(sub_trop_increase, 'change_hotspots/fish_subtrop_increase.tif', format='GTiff')
+writeRaster(trop_decrease, 'change_hotspots/fish_trop_decrease.tif', format='GTiff')
+writeRaster(subtrop_decrease, 'change_hotspots/fish_subtrop_decrease.tif', format='GTiff')
 
 #need to get the same legend
 stack_posterplot<-stack(dif_list[[2]], dif_list[[4]], dif_list[[5]], dif_list[[8]])
@@ -1278,7 +1528,4 @@ plot(stack_posterplot)
 p1<-spplot(stack_posterplot, col.regions=terrain.colors)
 p1
 p1+layer(sp.polygons(japan_outline))
-
-
-
 
