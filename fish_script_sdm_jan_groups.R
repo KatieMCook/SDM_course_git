@@ -168,15 +168,15 @@ RCP26_2050<-mask(RCP26_2050, predict_area)
 #par(mfrow=c(2,2))
 
 #for (i in 1:nlayers(area_pred)){
-  stand_ras<-standard(area_pred[[i]])
+ # stand_ras<-standard(area_pred[[i]])
   
-  test_ras<-area_pred[[i]]
+  #test_ras<-area_pred[[i]]
   
-  test_ras[]<-stand_ras[]
+ # test_ras[]<-stand_ras[]
   
-  assign(paste0('stand_', i), test_ras)
+  #assign(paste0('stand_', i), test_ras)
   
-}
+#}
 
 #plot()
 
@@ -190,15 +190,15 @@ RCP26_2050<-mask(RCP26_2050, predict_area)
 #ok now standardise future 
 #RCP26
 #for (i in 1:nlayers(RCP26_2050)){
-  stand_ras<-standard(RCP26_2050[[i]])
+ # stand_ras<-standard(RCP26_2050[[i]])
   
-  test_ras<-RCP26_2050[[i]]
+ # test_ras<-RCP26_2050[[i]]
   
-  test_ras[]<-stand_ras[]
+ # test_ras[]<-stand_ras[]
   
-  assign(paste0('stand_', i), test_ras)
+ # assign(paste0('stand_', i), test_ras)
   
-}
+#}
 
 
 #RCP26_2050<-stack(stand_1, stand_2, stand_3, stand_4)
@@ -210,15 +210,15 @@ RCP26_2050<-mask(RCP26_2050, predict_area)
 #RCP85_2050
 
 #for (i in 1:nlayers(RCP85_2050)){
-  stand_ras<-standard(RCP85_2050[[i]])
+ # stand_ras<-standard(RCP85_2050[[i]])
   
-  test_ras<-RCP85_2050[[i]]
+ # test_ras<-RCP85_2050[[i]]
   
-  test_ras[]<-stand_ras[]
+ # test_ras[]<-stand_ras[]
   
-  assign(paste0('stand_', i), test_ras)
+ # assign(paste0('stand_', i), test_ras)
   
-}
+#}
 
 
 #RCP85_2050<-stack(stand_1, stand_2, stand_3, stand_4)
@@ -500,11 +500,12 @@ box()
 #fgroup_site<-fgroup_site[-223,]
 
 
+fgroup_site$abundance<-ceiling(fgroup_site$abundance)
 
 #split data by functional group 
 for (i in 1:length(unique(fgroup_site$group))){
   rows<-which(fgroup_site$group==i)
-  assign(paste0("Obvs_gr_", i), data.frame(fgroup_site[rows,]))
+  assign(paste0("Obvs_gr_", LETTERS[i]), data.frame(fgroup_site[rows,]))
 }
 
 
@@ -593,6 +594,12 @@ AIC(gam1)
 #create models ########start here 
 #now model in loop with 15% test 85% training (n=5)
 
+
+library(lme4)
+library(mgcv)
+library(gamm4)
+library(MASS)
+
 models_all<- function(data){
 
   rmse_all<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, RFP=1) 
@@ -654,9 +661,9 @@ for (i in 1:100){
   
   
   #predict models for test
-  prglm<-predict( glm1, test)
-  prgam<-predict(gam1, test)
-  prRF<-predict(rf1, test)
+  prglm<-predict( glm1, test, type='response')
+  prgam<-predict(gam1, test, type='response')
+  prRF<-predict(rf1, test, type='response')
   
   #now rmse for all  
   rmse_all[i,1]<-rmse(obvs, prglm)
@@ -745,7 +752,7 @@ for (i in 1: length(averages)){
 old_averages<-averages.df
 
 #plot group abundances
-par(mfrow=c(3,3))
+par(mfrow=c(4,3))
 for (i in 1:length(group_list)){
   hist(group_list[[i]]$abundance, main=i)
 }
@@ -783,7 +790,7 @@ summary(glm_step_6)
 #find best model for each and use to predict. 
 
 
-#full model, predict and ensemble   #loop
+#full model, predict and ensemble   #loop (make the models with coefs that are not significant excluded)
 
 for (i in 1:length(extract_all)) {
   
@@ -835,19 +842,46 @@ for (i in 1:length(extract_all)) {
   assign(paste0('gam_gr', i), gam_gr)
   assign(paste0('rf_gr', i), rf_gr)
   
-  pr_glm<-predict(area_pred, glm_gr)
-  pr_gam<-predict(area_pred, gam_gr)
-  pr_rf<-predict(area_pred, rf_gr)    
+  pr_glm<-predict(area_pred, glm_gr, type='response')
+  pr_gam<-predict(area_pred, gam_gr, type='response')
+  pr_rf<-predict(area_pred, rf_gr, type='response')    
   
   assign(paste0('pr_glm_gr', i), pr_glm)
   assign(paste0('pr_gam_gr', i), pr_glm)
   assign(paste0('pr_rf_gr', i), pr_rf)
   
+  
+  #make it so only the significant models are included 
+  
+  #make all the RMSE values 1/ themselves so that the larger errors become smaller proportions
+  averages[[i]]<- averages[[i]]/((averages[[i]])^2)
+  
+  
+  #extract p values of glm coefs 
+  glm_pvals<- summary(glm_gr)$coefficients[,4]
+  #remove intercept column 
+  glm_pvals<- glm_pvals[-1]
+  
+  #trues are 1 and false 0. if sum =length then they are all over 0.05 and this makes averages 0
+  if (sum(glm_pvals > 0.05) == length(glm_pvals)){
+    averages[[i]][,1]<-0
+    average_pear[[i]][,1]<- 0
+  }                        
+  
+  #now same for gam 
+  gam_step_table<-data.frame(summary(gam_gr)$s.table)
+  
+  if (sum (gam_step_table$p.value > 0.05)== length(gam_step_table$p.value)) {
+    averages[[i]][,2]<-0
+    average_pear[[i]][,2]<-0
+  }
+  
+  
   #make the ensemble model from RMSE and Pearsons proportions 
   props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,3]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,1]<-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,2]<-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,3]<-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
   
   props[1,4]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
   props[1,5]<-abs(average_pear[[i]][1,2])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
@@ -908,6 +942,7 @@ summary(gam_gr11)
 summary(glm_gr12)
 summary(gam_gr12)
 
+
 #plot ensembles
 library(viridis)
 pal <- viridis(n=40, option='plasma', direction=-1)
@@ -922,6 +957,12 @@ for ( i in 1:length(ens_list)){
   plot(japan_outline, add=TRUE, col='grey', border='black')
   box()
 }
+
+
+
+
+
+
 
 #plot trop subtrop example 
 par(mfrow=c(1,2))
@@ -951,9 +992,9 @@ names(RCP85_2050)<-names(current_preds)
 
 for (i in 1:length(extract_all)) {
   
-  pr_glm_fut<-predict(RCP85_2050, glm_list[[i]])
-  pr_gam_fut<-predict(RCP85_2050, gam_list[[i]])
-  pr_rf_fut<-predict(RCP85_2050, rf_list[[i+12]])
+  pr_glm_fut<-predict(RCP85_2050, glm_list[[i]], type='response')
+  pr_gam_fut<-predict(RCP85_2050, gam_list[[i]], type='response')
+  pr_rf_fut<-predict(RCP85_2050, rf_list[[i+12]], type='response')
   
   assign(paste0('glm_fut_85', i), pr_glm_fut)
   assign(paste0('gam_fut_85', i), pr_gam_fut)
@@ -961,9 +1002,9 @@ for (i in 1:length(extract_all)) {
   
   #make the ensemble model from RMSE and Pearsons proportions 
   props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,3]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,1]<-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,2]<-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,3]<-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
   
   props[1,4]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
   props[1,5]<-abs(average_pear[[i]][1,2])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))

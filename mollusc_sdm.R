@@ -493,9 +493,9 @@ models_all<- function(data){
     
     
     #predict models for test
-    prglm<-predict( glm1, test)
-    prgam<-predict(gam1, test)
-    prRF<-predict(rf1, test)
+    prglm<-predict( glm1, test, type='response')
+    prgam<-predict(gam1, test, type='response')
+    prRF<-predict(rf1, test, type='response')
     
     #now rmse for all
     rmse_all[i,1]<-rmse(obvs, prglm)
@@ -676,23 +676,51 @@ for (i in 1:length(extract_all)) {
   rf_gr<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
                         BO2_chlomean_ss, data=extract_all[[i]], ntree=300, importance=TRUE  )
   
+  #make all the RMSE values 1/ themselves so that the larger errors become smaller proportions
+  averages[[i]]<- averages[[i]]/((averages[[i]])^2)
+  
+  
+  #extract p values of glm coefs 
+  glm_pvals<- summary(glm_gr)$coefficients[,4]
+  #remove intercept column 
+  glm_pvals<- glm_pvals[-1]
+  
+  #trues are 1 and false 0. if sum =length then they are all over 0.05 and this makes averages 0
+  if (sum(glm_pvals > 0.05) == length(glm_pvals)){
+    averages[[i]][,1]<-0
+    average_pear[[i]][,1]<- 0
+  }                        
+  
+  #now same for gam 
+  gam_step_table<-data.frame(summary(gam_gr)$s.table)
+  
+  if (sum (gam_step_table$p.value > 0.05)== length(gam_step_table$p.value)) {
+    averages[[i]][,2]<-0
+    average_pear[[i]][,2]<-0
+  }
+  
+  
+  
+  
   assign(paste0('glm_gr', i), glm_gr)
   assign(paste0('gam_gr', i), gam_gr)
   assign(paste0('rf_gr', i), rf_gr)
   
-  pr_glm<-predict(area_pred, glm_gr)
-  pr_gam<-predict(area_pred, gam_gr)
-  pr_rf<-predict(area_pred, rf_gr)    
+  pr_glm<-predict(area_pred, glm_gr, type='response')
+  pr_gam<-predict(area_pred, gam_gr, type='response')
+  pr_rf<-predict(area_pred, rf_gr, type='response')    
   
   assign(paste0('pr_glm_gr', i), pr_glm)
-  assign(paste0('pr_gam_gr', i), pr_glm)
+  assign(paste0('pr_gam_gr', i), pr_gam)
   assign(paste0('pr_rf_gr', i), pr_rf)
+  
+  averages<- averages
   
   #make the ensemble model from RMSE and Pearsons proportions 
   props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,3]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,1]<-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,2]<-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,3]<-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
   
   props[1,4]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
   props[1,5]<-abs(average_pear[[i]][1,2])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
@@ -764,14 +792,7 @@ for ( i in 1:length(ens_list)){
   box()
 }
 
-#plot tropical subtropical
-par(mfrow=c(1,2))
-plot(ens_list[[2]], col=pal, main='Group 2')
-plot(japan_outline, col='light grey', add=TRUE)
-box()
-plot(ens_list[[3]], col=pal, main='Group 3')
-plot(japan_outline, add=TRUE, col='light grey')
-box()
+#######start here tomorrow! ----
 
 
 #now future RCP85
@@ -792,9 +813,9 @@ names(RCP85_2050)<-names(current_preds)
 
 for (i in 1:length(extract_all)) {
   
-  pr_glm_fut<-predict(RCP85_2050, glm_list[[i]])
-  pr_gam_fut<-predict(RCP85_2050, gam_list[[i]])
-  pr_rf_fut<-predict(RCP85_2050, rf_list[[i+7]])
+  pr_glm_fut<-predict(RCP85_2050, glm_list[[i]], type='response')
+  pr_gam_fut<-predict(RCP85_2050, gam_list[[i]], type='response')
+  pr_rf_fut<-predict(RCP85_2050, rf_list[[i+7]], type='response')
   
   assign(paste0('glm_fut_85', i), pr_glm_fut)
   assign(paste0('gam_fut_85', i), pr_gam_fut)
@@ -802,9 +823,9 @@ for (i in 1:length(extract_all)) {
   
   #make the ensemble model from RMSE and Pearsons proportions 
   props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,3]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,1]<-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,2]<-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,3]<-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
   
   props[1,4]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
   props[1,5]<-abs(average_pear[[i]][1,2])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
@@ -831,6 +852,7 @@ fut_ens85_list<-lapply(ls(pattern='fut_ensemble_85_gr'), get)
 
 
 #plot
+par(mar=c(2,2,2,2))
 par(mfrow=c(3,3))
 
 for (i in 1:length(fut_ens85_list)){
@@ -849,18 +871,18 @@ plot(RCP26_2050)
 
 for (i in 1:length(extract_all)) {
   
-  pr_glm_fut<-predict(RCP26_2050, glm_list[[i]])
-  pr_gam_fut<-predict(RCP26_2050, gam_list[[i]])
-  pr_rf_fut<-predict(RCP26_2050, rf_list[[i+7]])
+  pr_glm_fut<-predict(RCP26_2050, glm_list[[i]], type='response')
+  pr_gam_fut<-predict(RCP26_2050, gam_list[[i]], type='response')
+  pr_rf_fut<-predict(RCP26_2050, rf_list[[i+7]], type='response')
   
   assign(paste0('glm_fut_26', i), pr_glm_fut)
   assign(paste0('gam_fut_26', i), pr_gam_fut)
   assign(paste0('rf_fut_26', i), pr_rf_fut)
   
   props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,3]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,1]<-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,2]<-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,3]<-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
   
   props[1,4]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
   props[1,5]<-abs(average_pear[[i]][1,2])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
@@ -1043,6 +1065,10 @@ for (i in 1:length(dif_mask85)){
 
 dif85_values_all<-lapply(ls(pattern='dif85_values_gr'), get)
 
+par(mfrow=c(3,3))
+for (i in 1: length(dif85_values_all)){
+  plot(values~x, data=dif85_values_all[[i]])
+}
 
 #group into 1 df
 for (i in 1: length(dif85_values_all)){
@@ -1058,6 +1084,7 @@ dif85_all_df<-do.call(rbind, dif85_values_all)
 dif85_all_df$group<-as.factor(dif85_all_df$group)
 
 ggplot(dif85_all_df, aes(x=y, y=values, col=group))+
+  #geom_point()+
   geom_smooth(method='loess', se=FALSE)
 # facet_zoom(ylim=c(-2, 2))  #zooms in on the smaller ones 
 
@@ -1121,9 +1148,11 @@ dif_values_all<- rbind(dif85_all_df, dif26_all_df)
 dif_values_all$climate<-as.factor(dif_values_all$climate)
 
 
-ggplot(dif_values_all, aes(x=slope, y=values, col=group))+
+ggplot(dif_values_all, aes(x=x, y=values, col=group))+
   geom_smooth(method='loess', se=FALSE)+
-  facet_wrap(~climate)
+  labs(x='Latitude', y='Relative Change in abundance')+
+  facet_wrap(~climate)+
+  theme_bw()
 
 write.csv(dif_values_all, 'dif_values_all_molluscs_norm.csv')
 
