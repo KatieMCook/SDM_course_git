@@ -155,10 +155,10 @@ RCP26_2050<-mask(RCP26_2050, predict_area)
 
 #standardise coefficients
 #standard<- function(data){
-  stand_dat<-(data[]-mean(data[], na.rm=TRUE))
-  return(stand_dat)
+#  stand_dat<-(data[]-mean(data[], na.rm=TRUE))
+ # return(stand_dat)
   
-}
+#}
 
 
 
@@ -689,43 +689,6 @@ for (i in 1:100){
 allrmse<-lapply(extract_all, models_all)
 
 
-#testing the models
-glmtest1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[1]] )
-glmtest1
-summary(glmtest1)
-
-glmtest2<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[2]] )
-glmtest2
-summary(glmtest2)
-
-glmtest3<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[3]] )
-glmtest3
-summary(glmtest3)
-
-glmtest4<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[4]])
-glmtest4
-summary(glmtest4)
-
-glmtest5<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[5]])
-glmtest5
-summary(glmtest5)
-
-glmtest6<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[6]] )
-glmtest6
-summary(glmtest6)
-
-
-glmtest7<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[7]])
-glmtest7
-summary(glmtest7)
-
-glmtest8<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[8]] )
-glmtest8
-summary(glmtest8)
-
-glmtest9<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=extract_all[[9]])
-glmtest9
-summary(glmtest9)
 
 #get averages as it didnt work 
 
@@ -838,17 +801,17 @@ for (i in 1:length(extract_all)) {
   rf_gr<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
                          BO2_chlomean_ss, data=extract_all[[i]], ntree=300, importance=TRUE  )
   
-  assign(paste0('glm_gr', i), glm_gr)
-  assign(paste0('gam_gr', i), gam_gr)
-  assign(paste0('rf_gr', i), rf_gr)
+  assign(paste0('glm_gr', LETTERS[i]), glm_gr)
+  assign(paste0('gam_gr', LETTERS[i]), gam_gr)
+  assign(paste0('rf_gr', LETTERS[i]), rf_gr)
   
   pr_glm<-predict(area_pred, glm_gr, type='response')
   pr_gam<-predict(area_pred, gam_gr, type='response')
   pr_rf<-predict(area_pred, rf_gr, type='response')    
   
-  assign(paste0('pr_glm_gr', i), pr_glm)
-  assign(paste0('pr_gam_gr', i), pr_glm)
-  assign(paste0('pr_rf_gr', i), pr_rf)
+  assign(paste0('pr_glm_gr', LETTERS[i]), pr_glm)
+  assign(paste0('pr_gam_gr', LETTERS[i]), pr_glm)
+  assign(paste0('pr_rf_gr', LETTERS[i]), pr_rf)
   
   
   #make it so only the significant models are included 
@@ -868,6 +831,12 @@ for (i in 1:length(extract_all)) {
     average_pear[[i]][,1]<- 0
   }                        
   
+  #now say if the RMSE is larger then the mean, proportion= 0
+  if (averages.df[i, 1]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
+    averages[[i]][,1]<- 0 
+    average_pear[[i]][,1]<-0
+  }
+  
   #now same for gam 
   gam_step_table<-data.frame(summary(gam_gr)$s.table)
   
@@ -876,6 +845,17 @@ for (i in 1:length(extract_all)) {
     average_pear[[i]][,2]<-0
   }
   
+  #if RMSE is larger then mean make it zero
+  if (averages.df[i, 2]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
+    averages[[i]][,2]<- 0 
+    average_pear[[i]][,2]<- 0
+  }
+  
+  #finally for RF
+  if (averages.df[i, 3]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
+    averages[[i]][,3]<- 0
+    average_pear[[i]][,3]<-0
+  }
   
   #make the ensemble model from RMSE and Pearsons proportions 
   props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
@@ -891,59 +871,53 @@ for (i in 1:length(extract_all)) {
                     gam=((props[1,2]+props[1,5])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])),
                     rf=((props[1,3]+props[1,6])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])))
   
-  assign(paste0('prop_gr', i), props)
+  assign(paste0('prop_gr', LETTERS[i]), props)
   
   ensemble<- ((pr_glm*props[1,1])+(pr_gam*props[1,2])+ (pr_rf*props[1,3]))
   
-  assign(paste0('ensemble_gr', i), ensemble)
+  assign(paste0('ensemble_gr', LETTERS[i]), ensemble)
   
  
   
  }
 
+summary(glm_grA)
+summary(gam_grA)
 
+summary(glm_grB)
+summary(gam_grB)
 
-summary(glm_gr1)
-summary(gam_gr1)
+summary(glm_grC)
+summary(gam_grC)
 
-summary(glm_gr2)
-summary(gam_gr2)
+summary(glm_grD)
+summary(gam_grD)
 
+summary(glm_grE)
+summary(gam_grE)
 
-summary(glm_gr3)
-summary(gam_gr3)
+summary(glm_grF)
+summary(gam_grF)
 
-summary(glm_gr4)
-summary(gam_gr4)
+summary(glm_grG)
+summary(gam_grG)
 
+summary(glm_grH)
+summary(gam_grH)
 
-summary(glm_gr5) 
-summary(gam_gr5)
+summary(glm_grI)
+summary(gam_grI)
 
+summary(glm_grJ)
+summary(gam_grJ)
 
-summary(glm_gr6)
-summary(gam_gr6)
+summary(glm_grK)
+summary(gam_grK)
 
-
-summary(glm_gr7)
-summary(gam_gr7)
-
-summary(glm_gr8)
-summary(gam_gr8)
-
-summary(glm_gr9)
-
-summary(glm_gr10)
-summary(gam_gr10)
-
-summary(glm_gr11)
-summary(gam_gr11)
-
-summary(glm_gr12)
-summary(gam_gr12)
-
-
+summary(glm_grL)
+summary(gam_grL)
 #plot ensembles
+
 library(viridis)
 pal <- viridis(n=40, option='plasma', direction=-1)
 
@@ -959,19 +933,17 @@ for ( i in 1:length(ens_list)){
 }
 
 
+#some sort of filter out for things with an error too large? done. 
 
 
 
+summary(glm_grH)
+summary(gam_grH)
 
+summary(gam_grB)
+summary(gam_grF)
+summary(gam_grL)
 
-#plot trop subtrop example 
-par(mfrow=c(1,2))
-plot(fut_ens_list[[1]], col=pal, main='Group 1')
-plot(japan_outline, add=TRUE, col='light grey', border='black')
-box()
-plot(fut_ens_list[[9]], col=pal, main='Group 9')
-plot(japan_outline, add=TRUE, col='light grey', border='black')
-box()
 
 
 #now future RCP85----
@@ -992,13 +964,13 @@ names(RCP85_2050)<-names(current_preds)
 
 for (i in 1:length(extract_all)) {
   
-  pr_glm_fut<-predict(RCP85_2050, glm_list[[i]], type='response')
-  pr_gam_fut<-predict(RCP85_2050, gam_list[[i]], type='response')
-  pr_rf_fut<-predict(RCP85_2050, rf_list[[i+12]], type='response')
+  pr_glm_fut85<-predict(RCP85_2050, glm_list[[i]], type='response')
+  pr_gam_fut85<-predict(RCP85_2050, gam_list[[i]], type='response')
+  pr_rf_fut85<-predict(RCP85_2050, rf_list[[i+12]], type='response')
   
-  assign(paste0('glm_fut_85', i), pr_glm_fut)
-  assign(paste0('gam_fut_85', i), pr_gam_fut)
-  assign(paste0('rf_fut_85', i), pr_rf_fut)
+  assign(paste0('glm_fut_85', LETTERS[i]), pr_glm_fut85)
+  assign(paste0('gam_fut_85', LETTERS[i]), pr_gam_fut85)
+  assign(paste0('rf_fut_85', LETTERS[i]), pr_rf_fut85)
   
   #make the ensemble model from RMSE and Pearsons proportions 
   props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
@@ -1015,14 +987,13 @@ for (i in 1:length(extract_all)) {
                     rf=((props[1,3]+props[1,6])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])))
   
   
-  ensemble_fut<- ((pr_glm_fut*props[1,1])+(pr_gam_fut*props[1,2])+(pr_rf_fut*props[1,3]))
+  ensemble_fut<- ((pr_glm_fut85*props[1,1])+(pr_gam_fut85*props[1,2])+(pr_rf_fut85*props[1,3]))
   
-  assign(paste0('fut_ensemble_85_gr', i), ensemble_fut)
+  assign(paste0('fut_ensemble_85_gr', LETTERS[i]), ensemble_fut)
   
   
   
 }
-plot(fut_ensemble_85_gr7)
 
 fut_ens85_list<-lapply(ls(pattern='fut_ensemble_85_gr'), get)
 
@@ -1046,18 +1017,18 @@ plot(RCP26_2050)
 
 for (i in 1:length(extract_all)) {
   
-  pr_glm_fut<-predict(RCP26_2050, glm_list[[i]])
-  pr_gam_fut<-predict(RCP26_2050, gam_list[[i]])
-  pr_rf_fut<-predict(RCP26_2050, rf_list[[i+12]])
+  pr_glm_fut26<-predict(RCP26_2050, glm_list[[i]], type='response')
+  pr_gam_fut26<-predict(RCP26_2050, gam_list[[i]], type='response')
+  pr_rf_fut26<-predict(RCP26_2050, rf_list[[i+12]], type='response')
   
-  assign(paste0('glm_fut_26', i), pr_glm_fut)
-  assign(paste0('gam_fut_26', i), pr_gam_fut)
-  assign(paste0('rf_fut_26', i), pr_rf_fut)
+  assign(paste0('glm_fut_26', LETTERS[i]), pr_glm_fut26)
+  assign(paste0('gam_fut_26', LETTERS[i]), pr_gam_fut26)
+  assign(paste0('rf_fut_26', LETTERS[i]), pr_rf_fut26)
   
   props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
-  props[1,3]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,1]<-(averages[[i]][1,1]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,2]<-(averages[[i]][1,2]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
+  props[1,3]<-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,2]+averages[[i]][1,3]))
   
   props[1,4]<-abs(average_pear[[i]][1,1])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
   props[1,5]<-abs(average_pear[[i]][1,2])/(abs(average_pear[[i]][1,1])+abs(average_pear[[i]][1,2])+abs(average_pear[[i]][1,3]))
@@ -1069,9 +1040,9 @@ for (i in 1:length(extract_all)) {
   
   
   
-  ensemble_fut<- ((pr_glm_fut*props[1,1])+(pr_gam_fut*props[1,2])+(pr_rf_fut*props[1,3]))
+  ensemble_fut<- ((pr_glm_fut26*props[1,1])+(pr_gam_fut26*props[1,2])+(pr_rf_fut26*props[1,3]))
   
-  assign(paste0('fut_ensemble_26_gr', i), ensemble_fut)
+  assign(paste0('fut_ensemble_26_gr', LETTERS[i]), ensemble_fut)
   
   
   
@@ -1081,7 +1052,8 @@ fut_ens26_list<-lapply(ls(pattern='fut_ensemble_26_gr'), get)
 
 
 #plot
-par(mfrow=c(3,3))
+par(mar=c(2,2,2,2))
+par(mfrow=c(4,3))
 
 for (i in 1:length(fut_ens26_list)){
   plot(fut_ens26_list[[i]], col=pal, main=paste0('Group', i))
@@ -1110,7 +1082,7 @@ fut_ens26_norm<-lapply(fut_ens26_list, normalize)
 for ( i in 1:length(fut_ens85_norm)){
   
   diff<- fut_ens85_norm[[i]] - ens_list_norm[[i]]
-  assign(paste0('dif_gr', i), diff)
+  assign(paste0('dif_gr', LETTERS[i]), diff)
 }
 
 dif_list85<-lapply(ls(pattern='dif_gr'), get)
@@ -1127,7 +1099,7 @@ for (i in 1:length(dif_list85)){
 for ( i in 1:length(fut_ens26_norm)){
   
   diff<- fut_ens26_norm[[i]] - ens_list_norm[[i]]
-  assign(paste0('dif_gr', i), diff)
+  assign(paste0('dif_gr', LETTERS[i]), diff)
 }
 
 dif_list26<-lapply(ls(pattern='dif_gr'), get)
@@ -1191,7 +1163,7 @@ crs(japan_outline)
 
 for (i in 1:length(dif_list85)){
   dif_mask<- mask(dif_list85[[i]], buffer30k)
-  assign(paste0('dif85_mask_gr', i), dif_mask)
+  assign(paste0('dif85_mask_gr', LETTERS[i]), dif_mask)
 }
 
 dif_mask85<-lapply(ls(pattern='dif85_mask_gr'), get)
@@ -1233,7 +1205,7 @@ for (i in 1:length(dif_mask85)){
   values<-extract(dif_list85[[i]], coords)
   coords$values<-values
   coords$slope<-coords$ x * coords$y
-  assign(paste0('dif85_values_gr', i), coords)
+  assign(paste0('dif85_values_gr', LETTERS[i]), coords)
 }
 
 dif85_values_all<-lapply(ls(pattern='dif85_values_gr'), get)
@@ -1264,7 +1236,7 @@ ggplot(dif85_all_df, aes(x=slope, y=values, col=group))+
 
 for (i in 1:length(dif_list26)){
   dif_mask<- mask(dif_list26[[i]], buffer30k)
-  assign(paste0('dif26_mask_gr', i), dif_mask)
+  assign(paste0('dif26_mask_gr',LETTERS[i]), dif_mask)
 }
 
 dif_mask26<-lapply(ls(pattern='dif26_mask_gr'), get)
@@ -1288,7 +1260,7 @@ for (i in 1:length(dif_mask26)){
   values<-extract(dif_list26[[i]], coords)
   coords$values<-values
   coords$slope<-coords$ x * coords$y
-  assign(paste0('dif26_values_gr', i), coords)
+  assign(paste0('dif26_values_gr', LETTERS[i]), coords)
 }
 
 dif26_values_all<-lapply(ls(pattern='dif26_values_gr'), get)
