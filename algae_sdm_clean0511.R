@@ -707,6 +707,14 @@ for ( i in 1:length(ens_list)){
   
 }
 
+setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git/plotting/algae/current")
+
+for (i in 1:length(ens_list)){
+  writeRaster(ens_list[[i]], paste0('ens_', i), format='GTiff', overwrite=TRUE)
+}
+
+test<-raster('ens_1.tif')
+plot(test)
 
 #now future RCP85
 rm(glm_gr)
@@ -831,7 +839,7 @@ for (i in 1:length(fut_ens26_list)){
   
 }
 
-
+setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
 #try cropping first?
 
 buffer30k<-readOGR('30k_coastplot/outline30k.shp')
@@ -861,18 +869,22 @@ ens_mask26_list<-lapply(ls(pattern='ens26_mask_gr'), get)
 
 #before getting difference standardise abundance between zero and 1 ----
 
-normalize <- function(x) {
-  return ((x -  x@data@min)/ (x@data@max -  x@data@min))
-}
+#normalize <- function(x) {
+  #return ((x -  x@data@min)/ (x@data@max -  x@data@min))
+#}
 
-fut_ens85_norm<- lapply(ens_mask85_list, normalize)
+fut_ens85_norm<- ens_mask85_list
 
-ens_list_norm<-lapply(ens_list, normalize)
+ens_list_norm<-ens_list
 
-fut_ens26_norm<-lapply(ens_mask26_list, normalize)
+fut_ens26_norm<-ens_mask26_list
 
 plot(fut_ens85_norm[[1]])
 plot(fut_ens26_norm[[1]])
+
+
+library(viridis)
+pal <- viridis(n=20, option='plasma' )
 
 
 #now get difference between two and plot
@@ -909,7 +921,24 @@ for (i in 1:length(dif_list26)){
 }
 
 
+plot(dif_list26[[1]])
 
+#now write the lists so you dont have to rerun 
+setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git/plotting/algae/RCP85")
+
+names(dif_list85)<-c(1:length(dif_list85))
+
+for (i in 1:length(dif_list85)){
+  writeRaster(dif_list85[[i]], paste0('RCP85_dif', i), format='GTiff', overwrite=TRUE)
+}
+
+names(dif_list85)
+
+setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git/plotting/algae/RCP26")
+
+for (i in 1:length(dif_list26)){
+  writeRaster(dif_list26[[i]], paste0('RCP26_dif', i), format='GTiff', overwrite=TRUE)
+}
 
 #now buffer 30km from the coast and crop by predict area----
 #crs(japan_outline) #in wgs project into something in km 
@@ -1090,13 +1119,13 @@ dif_values_all<- rbind(dif85_all_df, dif26_all_df)
 dif_values_all$climate<-as.factor(dif_values_all$climate)
 
 
-ggplot(dif_values_all, aes(x=x, y=values, col=group))+
+ggplot(dif_values_all, aes(x=y, y=values, col=group))+
   geom_smooth(method='loess')+
   #geom_smooth(method='gam' ,formula = y~s(x))+
   facet_wrap(~climate)+
   geom_hline(yintercept=0, linetype='dotted')+
   theme_bw()+
-  xlab('Latitude')+ ylab('Relative change in abundance')
+  xlab('Latitude')+ ylab('Change in abundance')
 
 
 
@@ -1107,6 +1136,66 @@ write.csv(dif_values_all, 'dif_values_all_algae_norm.csv')
 
 #ooookkkkk
 #now can find where the areas change the most
+
+#now actually standardise
+standard<- function (x){
+  return((x- mean(x[x]))/sd(x[x]) )
+}
+
+
+stand_list<-lapply(dif_list85, standard )
+par(mfrow=c(3,3))
+for (i in 1:length(stand_list)){
+  plot(stand_list[[i]])
+} 
+
+
+#split in tropical and subtropical
+trop_stack<-stack(stand_list[1])
+subtrop_stack<-stack(stand_list[c(2,3,4,5)])
+
+par(mfrow=c(1,1))
+
+plot(trop_stack)
+
+plot(subtrop_stack)
+
+
+#where changes
+trop_stack_sum<-(sum(trop_stack)/1) 
+plot(trop_stack_sum)
+
+
+subtrop_stack_sum<-(sum(subtrop_stack)/4)
+plot(subtrop_stack_sum)
+
+pall <- c('red3', 'lightsalmon1', 'white', 'cadetblue1', 'blue2')
+
+par(mfrow=c(1,2))
+plot(trop_stack_sum, col=colorRampPalette(pall[1:5])(25), main='Tropical')
+plot(japan_outline, col='grey68', border='grey68', add=TRUE)
+box()
+plot(trop_stack_sum, col=colorRampPalette(pall[1:5])(25),add=TRUE)
+
+
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:5])(25), main='Subtropical')
+plot(japan_outline, col='grey68', border='grey68', add=TRUE)
+box()
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:5])(25),add=TRUE)
+
+setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
+
+writeRaster(subtrop_stack_sum, 'change_hotspots/algae_subtrop_hotspots.tif', format='GTiff')
+writeRaster(trop_stack_sum, 'change_hotspots/algae_trop_hotspots.tif', format='GTiff')
+
+
+
+
+
+
+
+
+
 
 
 #split into below zero and above zero
