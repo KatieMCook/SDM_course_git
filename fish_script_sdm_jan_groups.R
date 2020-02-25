@@ -837,6 +837,12 @@ for (i in 1:length(extract_all)) {
     average_pear[[i]][,1]<-0
   }
   
+  
+  #now if the pearsons is smaller than 0.25 make it 0
+  if (averages_pear.df[i, 1]< 0.25) {
+    averages[[i]][,1]<- 0 
+    average_pear[[i]][,1]<-0
+  }
   #now same for gam 
   gam_step_table<-data.frame(summary(gam_gr)$s.table)
   
@@ -851,9 +857,30 @@ for (i in 1:length(extract_all)) {
     average_pear[[i]][,2]<- 0
   }
   
+  
+  #if pearsons less than 0.25 make zero
+  if (averages_pear.df[i, 2]< 0.25) {
+    averages[[i]][,2]<- 0 
+    average_pear[[i]][,2]<-0
+  }
+  
+  
   #finally for RF
   if (averages.df[i, 3]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
     averages[[i]][,3]<- 0
+    average_pear[[i]][,3]<-0
+  }
+  
+  
+  #if RMSE is larger then mean make it zero
+  if (averages.df[i, 3]> (0.5*(max(extract_all[[i]]$abundance)-min(extract_all[[i]]$abundance)))){
+    averages[[i]][,3]<- 0 
+    average_pear[[i]][,3]<- 0
+  }
+  
+  #if pearsons less than 0.25 make zero
+  if (averages_pear.df[i, 3]< 0.25) {
+    averages[[i]][,3]<- 0 
     average_pear[[i]][,3]<-0
   }
   
@@ -1062,23 +1089,62 @@ for (i in 1:length(fut_ens26_list)){
   
 }
 
+setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
+#try cropping first?
+
+buffer30k<-readOGR('30k_coastplot/outline30k.shp')
+crs(buffer30k)
+
+buffer30k<-spTransform(buffer30k,  '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0' )
+
+#now mask ens 85 by buffer crop
+
+for (i in 1:length(fut_ens85_list)){
+  ens_mask<- mask(fut_ens85_list[[i]], buffer30k)
+  assign(paste0('ens85_mask_gr',LETTERS[i]), ens_mask)
+}
+
+ens_mask85_list<-lapply(ls(pattern='ens85_mask_gr'), get)
+
+plot(ens_mask85_list[[1]])
+
+#mask 26
+for (i in 1:length(fut_ens26_list)){
+  ens_mask<- mask(fut_ens26_list[[i]], buffer30k)
+  assign(paste0('ens26_mask_gr', LETTERS[i]), ens_mask)
+}
+
+ens_mask26_list<-lapply(ls(pattern='ens26_mask_gr'), get)
+
 
 
 #before getting difference standardise abundance between zero and 1 ----
 
-normalize <- function(x) {
-  return ((x -  x@data@min)/ (x@data@max -  x@data@min))
-}
+#normalize <- function(x) {
+  #return ((x -  x@data@min)/ (x@data@max -  x@data@min))
+#}
 
-fut_ens85_norm<- lapply(fut_ens85_list, normalize)
+##fut_ens85_norm<- lapply(fut_ens85_list, normalize)
 
-ens_list_norm<-lapply(ens_list, normalize)
+#ens_list_norm<-lapply(ens_list, normalize)
 
-fut_ens26_norm<-lapply(fut_ens26_list, normalize)
+#fut_ens26_norm<-lapply(fut_ens26_list, normalize)
+
+fut_ens85_norm<- ens_mask85_list
+
+ens_list_norm<-ens_list
+
+fut_ens26_norm<-ens_mask26_list
 
 
 #now get difference between two and plot
 #RCP85
+
+plot(ens_mask85_list[[2]])
+plot(fut_ens85_norm[[2]])
+plot(fut_ens85_list[[2]])
+plot(ens85_mask_gr2)
+
 for ( i in 1:length(fut_ens85_norm)){
   
   diff<- fut_ens85_norm[[i]] - ens_list_norm[[i]]
@@ -1153,22 +1219,25 @@ for (i in 1:length(dif_list26)){
 
 #st_write(outline_30k, '30k_coastplot', 'outline30k.shp', driver='ESRI Shapefile')
 
-buffer30k<-readOGR('30k_coastplot/outline30k.shp')
-crs(buffer30k)
+#buffer30k<-readOGR('30k_coastplot/outline30k.shp')
+#crs(buffer30k)
 
-buffer30k<-spTransform(buffer30k,  '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0' )
+#buffer30k<-spTransform(buffer30k,  '+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0' )
 
-crs(japan_outline)
+#crs(japan_outline)
 #now mask dif 85 by buffer crop
 
-for (i in 1:length(dif_list85)){
-  dif_mask<- mask(dif_list85[[i]], buffer30k)
-  assign(paste0('dif85_mask_gr', LETTERS[i]), dif_mask)
-}
+#for (i in 1:length(dif_list85)){
+  #dif_mask<- mask(dif_list85[[i]], buffer30k)
+ # assign(paste0('dif85_mask_gr', LETTERS[i]), dif_mask)
+#}
 
-dif_mask85<-lapply(ls(pattern='dif85_mask_gr'), get)
+#dif_mask85<-lapply(ls(pattern='dif85_mask_gr'), get)
 
-plot(dif_mask85[[1]])
+dif_mask85<-dif_list85
+dif_mask26<-dif_list26
+
+plot(dif_mask85[[4]])
 
 par(mfrow=c(3,3))
 
@@ -1180,13 +1249,13 @@ for (i in 1:length(dif_mask85)){
 #turn all the variables to points then get the coords of points
 
 par(mfrow=c(1,1))
-points<- rasterToPoints(dif_mask85[[2]])
+points<- rasterToPoints(dif_mask85[[3]])
 plot(points)
 coords<-as.data.frame(coordinates(points))
 coords<-coords[,-3]
 
 #extract from the coords
-values<- extract(dif_list85[[2]], coords)
+values<- extract(dif_mask85[[3]], coords)
 
 coords$values<-values
 
@@ -1210,6 +1279,9 @@ for (i in 1:length(dif_mask85)){
 
 dif85_values_all<-lapply(ls(pattern='dif85_values_gr'), get)
 
+#fix this
+
+dif85_values_all<-dif85_values_all[-10]
 
 #group into 1 df
 for (i in 1: length(dif85_values_all)){
@@ -1220,13 +1292,18 @@ for (i in 1: length(dif85_values_all)){
 View(dif85_values_all[[1]])
 
 #now merge them all together 
+
+
+
 dif85_all_df<-do.call(rbind, dif85_values_all)
 
 dif85_all_df$group<-as.factor(dif85_all_df$group)
 
+library(ggforce)
+
 ggplot(dif85_all_df, aes(x=slope, y=values, col=group))+
   geom_smooth(method='loess', se=FALSE)+
-# facet_zoom(ylim=c(-1, 1.5))+
+ facet_zoom(ylim=c(-10, 20))+
   theme_bw()#zooms in on the smaller ones 
 
 
@@ -1243,7 +1320,7 @@ dif_mask26<-lapply(ls(pattern='dif26_mask_gr'), get)
 
 plot(dif_mask26[[1]])
 
-par(mfrow=c(3,3))
+par(mfrow=c(3,4))
 
 for (i in 1:length(dif_mask26)){
   plot(dif_mask26[[i]])
@@ -1265,6 +1342,7 @@ for (i in 1:length(dif_mask26)){
 
 dif26_values_all<-lapply(ls(pattern='dif26_values_gr'), get)
 
+dif26_values_all<-dif26_values_all[-10]
 
 #group into 1 df
 for (i in 1: length(dif26_values_all)){
@@ -1300,109 +1378,65 @@ write.csv(dif_values_all, 'dif_values_all_fish_jan.csv')
 
 
 
+#HOTSPOTS
+#now actually standardise #no 
+#standard<- function (x){
+ # return((x- mean(x[x]))/sd(x[x]) )
+#}
 
 
+stand_list<-dif_mask85
+
+#split in tropical and subtropical
+trop_stack<-stack(stand_list[c(1,3,4,5,6,7,9,11,12)])
+subtrop_stack<-stack(stand_list[c(2,8)])
+
+par(mfrow=c(1,1))
+
+plot(trop_stack)
+
+plot(subtrop_stack)
 
 
+#where changes
+trop_stack_sum<-(sum(trop_stack)/9) 
+plot(trop_stack_sum)
 
 
+subtrop_stack_sum<-(sum(subtrop_stack)/2)
+plot(subtrop_stack_sum)
 
+pall <- c('red3', 'lightsalmon1', 'white', 'cadetblue1', 'blue2')
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#now future 
-rm(glm_gr)
-
-glm_list<-lapply(ls(pattern='glm_gr'), get)
-
-rm(rf_gr)
-
-rf_list<-lapply(ls(pattern='rf_gr'), get)
-
-#make sure the colnames match
-names(future_preds)<-names(current_preds)
-plot(future_preds)
-
-
-for (i in 1:length(extract_all)) {
-  
-  pr_glm_fut<-predict(future_preds, glm_list[[i]])
-  pr_rf_fut<-predict(future_preds, rf_list[[i+9]])
-  
-  assign(paste0('glm_fut', i), pr_glm_fut)
-  assign(paste0('rf_fut', i), pr_rf_fut)
-  
-  props<-data.frame(glm=1, rf=1)
-  props[1,1]<-1-(averages[[i]][1,1]/(averages[[i]][1,1]++averages[[i]][1,3]))
-  props[1,2]<-1-(averages[[i]][1,3]/(averages[[i]][1,1]+averages[[i]][1,3]))
-  
-  ensemble_fut<- ((pr_glm_fut*props[1,1])+(pr_rf_fut*props[1,2]))
-  
-  assign(paste0('fut_ensemble_gr', i), ensemble_fut)
-  
-  
-  
-}
-plot(fut_ensemble_gr8)
-
-fut_ens_list<-lapply(ls(pattern='fut_ensemble_gr'), get)
-
-
-#plot
-par(mfrow=c(3,3))
-
-for (i in 1:length(fut_ens_list)){
-  plot(fut_ens_list[[i]])
-}
-
-
-
-#now get difference between two and plot
-for ( i in 1:length(fut_ens_list)){
- 
-   diff<- fut_ens_list[[i]] - ens_list[[i]]
-  assign(paste0('dif_gr', i), diff)
-}
-
-dif_list<-lapply(ls(pattern='dif_gr'), get)
-
-par(mfrow=c(3,3))
-for (i in 1:length(dif_list)){
-  plot(dif_list[[i]], col=pal, main=paste0('Group ', i))
-  plot(japan_outline, add=TRUE, col='light grey', border='black')
-  box()
-}
-
-#plot trop subtrop example 
 par(mfrow=c(1,2))
-plot(dif_list[[1]], col=pal, main='Group 1')
-plot(japan_outline, add=TRUE, col='light grey', border='black')
+plot(trop_stack_sum, col=colorRampPalette(pall[1:5])(25), main='Tropical')
+plot(japan_outline, col='grey68', border='grey68', add=TRUE)
 box()
-plot(dif_list[[9]], col=pal, main='Group 9')
-plot(japan_outline, add=TRUE, col='light grey', border='black')
+plot(trop_stack_sum, col=colorRampPalette(pall[1:5])(25),add=TRUE)
+
+
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:5])(25), main='Subtropical')
+plot(japan_outline, col='grey68', border='grey68', add=TRUE)
 box()
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:5])(25),add=TRUE)
+
+setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
+
+writeRaster(subtrop_stack_sum, 'change_hotspots/algae_subtrop_hotspots.tif', format='GTiff')
+writeRaster(trop_stack_sum, 'change_hotspots/algae_trop_hotspots.tif', format='GTiff')
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #ooookkkkk
 #now can find where the areas change the most
@@ -1410,14 +1444,14 @@ box()
 
 #split into below zero and above zero
 
-for ( i in 1:length(dif_list)){
-  layer<-dif_list[[i]]
+for ( i in 1:length(stand_list)){
+  layer<-stand_list[[i]]
   increase<-layer
   decrease<-layer
-  increase[increase < 0]<-NA
-  decrease[decrease>0]<-NA
-  assign(paste0('increase_gr', i),increase)
-  assign(paste0('decrease_gr', i),decrease)
+  increase[increase < 0]<-0
+  decrease[decrease>0]<-0
+  assign(paste0('increase_gr', LETTERS[i]),increase)
+  assign(paste0('decrease_gr', LETTERS[i]),decrease)
   
 }
 
@@ -1432,21 +1466,21 @@ plot(decrease_stack)
 
 
 
-#subtropical group; 2, 6,9
-#tropical group: 1, 3, 4, 5, 7, 8
+#subtropical group; 2, 8
+#tropical group: 1, 3, 4, 5,6, 7, 9,11,12
 
 #split in tropical and subtropical
-increase_trop_stack<-stack(increase_list[c(1,3,4,5,7,8)])
+increase_trop_stack<-stack(increase_list[c(1,3,4,5,6,7,9,11,12)])
 
 plot(increase_trop_stack)
 
-increase_subtrop_stack<-stack(increase_list[c(2,6,9)])
+increase_subtrop_stack<-stack(increase_list[c(2,8)])
 plot(increase_subtrop_stack)
 
-decrease_trop_stack<-stack(decrease_list[c(1,3,4,5,7,8)])
+decrease_trop_stack<-stack(decrease_list[c(1,3,4,5,6,7,9,11,12)])
 plot(decrease_trop_stack)
 
-decrease_subtrop_stack<-stack(decrease_list[c(2,6,9)])
+decrease_subtrop_stack<-stack(decrease_list[c(2,8)])
 plot(decrease_subtrop_stack)
 
 #where changes the most? values between 0, 1 for increase 
@@ -1493,11 +1527,17 @@ plot(subtrop_decrease)
 trop_increase<-rescale(trop_increase)
 sub_trop_increase<-rescale(sub_trop_increase)
 
+
+plot(trop_decrease)
+
+trop_decrease<-flip(trop_decrease)
 trop_decrease<-(rescale(trop_decrease))/-1
+subtrop_decrease<-flip(subtrop_decrease)
 subtrop_decrease<-(rescale(subtrop_decrease)/-1)
 
+plot(sub_trop_increase)
 #get rid of the subtrop increase below -1
-sub_trop_increase[sub_trop_increase<0.1]<-NA
+
 
 library(RColorBrewer)
 library(viridis)
@@ -1525,11 +1565,21 @@ plot(japan_outline, add=TRUE, border='light grey', col='light grey')
 box()
 
 
+trop<- trop_increase+trop_decrease
+subtrop<-sub_trop_increase+ subtrop_decrease
+
+par(mfrow=c(1,2))
+
+pall <- colorRampPalette(c('red3', 'lightsalmon1', 'white', 'cadetblue1', 'blue2'))
+
+plot(trop, col=pall(50))
+plot(subtrop, col=pall(50))
+plot(japan_outline, add=TRUE)
+
+
 #now write raster 
-writeRaster(trop_increase, 'change_hotspots/fish_trop_increase.tif', format='GTiff')
-writeRaster(sub_trop_increase, 'change_hotspots/fish_subtrop_increase.tif', format='GTiff')
-writeRaster(trop_decrease, 'change_hotspots/fish_trop_decrease.tif', format='GTiff')
-writeRaster(subtrop_decrease, 'change_hotspots/fish_subtrop_decrease.tif', format='GTiff')
+writeRaster(trop, 'change_hotspots/fish_trop_hotspot.tif', format='GTiff', overwrite=TRUE )
+writeRaster(subtrop, 'change_hotspots/subtrop_hotspot.tif', format='GTiff', overwrite=TRUE)
 
 #need to get the same legend
 stack_posterplot<-stack(dif_list[[2]], dif_list[[4]], dif_list[[5]], dif_list[[8]])
