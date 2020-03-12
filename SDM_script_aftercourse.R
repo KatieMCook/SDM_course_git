@@ -41,7 +41,7 @@ future_layers<-list_layers_future( marine = TRUE)
 
 
 #extract data 
-current_preds<-load_layers(c('BO_sstmean','BO2_curvelmax_ss', 'BO2_salinitymean_ss'))
+current_preds<-load_layers(c('BO_sstmin','BO2_curvelmax_ss', 'BO2_salinitymean_ss'))
 res(current_preds)
 plot(current_preds)
 
@@ -81,7 +81,7 @@ plot(japan_outline, add=TRUE)
 #RCP 85 2050
 future_2050<-filter(future_layers, year==2050, scenario=='RCP85')
 
-RCP85_2050<-load_layers(c(c('BO2_RCP85_2050_tempmean_ss','BO2_RCP85_2050_curvelmean_bdmin',
+RCP85_2050<-load_layers(c(c('BO2_RCP85_2050_tempmin_ss','BO2_RCP85_2050_curvelmean_bdmin',
                             'BO2_RCP85_2050_salinitymean_ss')))
 
 chlo_future<-load_layers('BO2_RCP85_2050_chlomean_ss')
@@ -114,6 +114,7 @@ bathy_shallow2[bathy_shallow2 < -100]<-NA
 
 
 plot(bathy_shallow2, col=my.colors(1000))   #bathy_shallow2 = better 
+
 
 
 
@@ -392,10 +393,11 @@ group1@data  #check the mask
 
 #now do sdm
 m1<-sdm(abundance~. , data=d, methods=c('glm', 'brt', 'rf'), 
-       replication=c('boot'),n=5, test.p=10 ,
+       replication='boot',test.percent=10 ,n=5, 
        modelSettings=list(brt=list(distribution='poisson',n.minobsinnode =5,bag.fraction =1), glm=list(family='poisson')))   ##do evaluation separately 
 
 m1@data@features.name
+
 m1
 
 
@@ -515,25 +517,18 @@ par(mfrow=c(1,1))
 plot(meow)
 
 
+#get the right ecoregion
 ##crop by ecoregion
 eco<-meow@data$ECOREGION
 which(eco=='Central Kuroshio Current')
-
 kuroshio.map<-meow[meow$ECOREGION %in% c('Central Kuroshio Current','South Kuroshio'),]
-
 plot(kuroshio.map)
-
 crs(kuroshio.map)
-
 points(group1, col='red')
-
 #merge shapefiles
 dissolve<- aggregate(kuroshio.map, dissolve=T)
-
 plot(dissolve)
-
 plot(japan_outline, add=TRUE)
-
 #plotting the ecoregion map
 #make transparent colours
 t_col <- function(color, percent = 50, name = NULL) {
@@ -552,45 +547,11 @@ t_col <- function(color, percent = 50, name = NULL) {
   
   
 }
-
 my.col<- t_col('cornflowerblue', percent = 50, name= 'transblue')
 ## END
 
 
-
-
-plot(japan_outline, 
-     xlim = c(min.lon, max.lon),
-     ylim = c(min.lat, max.lat),
-     col = "grey95",
-     axes = TRUE
-)
-
-crs(japan_outline)
-# Add the points for individual observation
-plot(kuroshio.map, add=TRUE, col=my.col)
-
-points(x = fgroup_site$lon, 
-       y = fgroup_site$lat, 
-       col = "red", 
-       pch = 17,
-       cex=2)
-# And draw a little box around the graph
-box()
-
-
-
-
-plot(japan_outline)
-
-points(group1, col='red', pch=17 )
-box()
-
-
 #meow preds
-
-
-
 
 plot(current_preds[[1]])
 

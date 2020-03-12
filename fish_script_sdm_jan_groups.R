@@ -1289,8 +1289,9 @@ for (i in 1: length(dif85_values_all)){
   dif85_values_all[[i]]$climate<-'RCP85'
 }
 
-View(dif85_values_all[[1]])
-
+View(dif85_values_all[[10]])
+dif85_values_all[[11]]$group<-12
+dif85_values_all[[10]]$group<-11
 #now merge them all together 
 
 
@@ -1344,6 +1345,8 @@ dif26_values_all<-lapply(ls(pattern='dif26_values_gr'), get)
 
 dif26_values_all<-dif26_values_all[-10]
 
+
+
 #group into 1 df
 for (i in 1: length(dif26_values_all)){
   dif26_values_all[[i]]$group<-i
@@ -1352,6 +1355,8 @@ for (i in 1: length(dif26_values_all)){
 
 View(dif26_values_all[[1]])
 
+dif26_values_all[[11]]$group<-12
+dif26_values_all[[10]]$group<-11
 #now merge them all together 
 dif26_all_df<-do.call(rbind, dif26_values_all)
 
@@ -1372,7 +1377,9 @@ ggplot(dif_values_all, aes(x=y, y=values, col=group))+
   geom_smooth(method='loess', se=FALSE)+
   scale_color_brewer(palette='Paired' )+
   facet_wrap(~climate)+
-  theme_bw()
+  theme_bw()+
+  ylim(-15 , 15)+
+  geom_hline(yintercept=0, linetype='dotted')
 
 write.csv(dif_values_all, 'dif_values_all_fish_jan.csv')
 
