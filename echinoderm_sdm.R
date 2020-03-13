@@ -347,7 +347,7 @@ models_all<- function(data){
   rmse_all<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, RFP=1)  
   
   
-  for (i in 1:100){
+  for (i in 1:1000){
     tryCatch( {
       #define test and training data
       test<- data[sample(nrow(data), size=6, replace=FALSE),]  
@@ -636,9 +636,18 @@ for (i in 1:length(extract_all)) {
   
 }
 
+par(mfrow=c(1,1))
 plot(ensemble_gr1)
+test_ens<-ensemble_gr1
+test_ens[test_ens>1000]<-NA
+plot(test_ens)
 
-ensemble_gr1
+
+#replace ensemble with rf because glm goes wild!
+ensemble_gr1<-pr_rf_gr1
+
+
+
 #look at models 
 summary(glm_gr1)
 summary(gam_gr1)
@@ -667,6 +676,150 @@ pal<-viridis(option='plasma', direction=-1, n=40)
 
 
 ens_list<-lapply(ls(pattern="ensemble_gr"),get)
+
+
+#get RMSE and Pearsons of ensembles
+#one way of doing it but im pretty sure this is wrong. ok again 
+ens_vals<- data.frame(group=1, RMSE=1, pear=1)
+latlon2<-latlon[,c(3,2)]
+
+for (i in 1:length(ens_list)){
+latlon2<-data.frame(lon=extract_all[[i]]$lon, lat=extract_all[[i]]$lat)
+obvs<- extract(ens_list[[i]], latlon2)
+exp<-extract_all[[i]]$abundance
+ens_vals[i,1]<-i
+ens_vals[i,2]<-rmse(exp, obvs)
+ens_vals[i,3]<-cor(exp, obvs, method='pearson')
+    
+}
+
+plot(obvs~exp)
+  
+
+#do it the long way dont be lazy 
+
+  
+  ens_vals_all<-data.frame(RMSE=1, pear=1)  
+  
+for (j in 1:length(extract_all))  {
+  data<-extract_all[[i]]
+  for (i in 1:1000){
+    tryCatch( {
+      #define test and training data
+      test<- data[sample(nrow(data), size=6, replace=FALSE),]  
+      train<- data[(! row.names(data) %in% row.names(test)), ]
+      
+      obvs<-test$abundance
+      
+      #make models
+      
+      ##GLM
+      glm1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=train)
+      glm1<- step(glm1, trace = 0, na.action=na.omit)
+      
+      ##GAM
+      gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5), family=nb(), data=train)
+      
+      abundance<-train$abundance
+      abundance<-as.data.frame(abundance)
+      
+      
+      #make df for loop to fill 
+      gam_step_table<-data.frame(summary(gam1)$s.table)
+      out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
+      
+      #set up formula to change 
+      form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) ", sep=""))
+      
+      #run step loop 
+      for(g in out_varib)
+      {
+        g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
+        
+        if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
+        if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
+        if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
+        if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
+        
+        gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
+        
+        if(AIC(gam2)<=AIC(gam1)){form<-form_g1
+        print(paste(g, " dropped", sep=""))}
+      }
+      
+      gam1 <-gam(form, data=train,  family=nb(), na.action=na.omit)
+      
+      
+      #RF
+      rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss  +
+                          BO2_chlomean_ss, data=train, ntree=300, importance=TRUE   )
+      
+      
+      #predict models for test
+      test_prglm<-predict( glm1, test, type='response')
+      test_prgam<-predict(gam1, test, type='response')
+      test_prRF<-predict(rf1, test, type='response')
+      
+  
+      #ok now ensemble these models
+      #make the ensemble model from RMSE and Pearsons proportions 
+      props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
+      props[1,1]<-(averages[[j]][1,1]/(averages[[j]][1,1]+averages[[j]][1,2]+averages[[j]][1,3]))
+      props[1,2]<-(averages[[j]][1,2]/(averages[[j]][1,1]+averages[[j]][1,2]+averages[[j]][1,3]))
+      props[1,3]<-(averages[[j]][1,3]/(averages[[j]][1,1]+averages[[j]][1,2]+averages[[j]][1,3]))
+      props[1,4]<-abs(average_pear[[j]][1,1])/(abs(average_pear[[j]][1,1])+abs(average_pear[[j]][1,2])+abs(average_pear[[j]][1,3]))
+      props[1,5]<-abs(average_pear[[j]][1,2])/(abs(average_pear[[j]][1,1])+abs(average_pear[[j]][1,2])+abs(average_pear[[j]][1,3]))
+      props[1,6]<-abs(average_pear[[j]][1,3])/(abs(average_pear[[j]][1,1])+abs(average_pear[[j]][1,2])+abs(average_pear[[j]][1,3]))
+      
+      props<-data.frame(glm=((props[1,1]+props[1,4])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])), 
+                        gam=((props[1,2]+props[1,5])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])),
+                        rf=((props[1,3]+props[1,6])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])))
+    
+      
+      ensemble<- ((test_prglm*props[1,1])+(test_prgam*props[1,2])+ (test_prRF*props[1,3]))
+      
+      #now rmse for all
+      ens_vals_all[i,1]<-rmse(obvs, ensemble)    ###ok this will make a df for each thing but not each group, sort this!!!!
+    
+      
+      #now pearsons correlation for all 
+      ens_vals_all[i,2]<-cor(obvs, ensemble, method = c("pearson"))
+      
+      print(i)
+      
+    } , error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+    
+  }
+  
+  
+}
+
+
+j=3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 par(mar=c(1.2,1.2,1.2,1.2))
 par(mfrow=c(2,3))
@@ -730,7 +883,9 @@ for (i in 1:length(extract_all)) {
   
 }
 
-plot(fut_ensemble_85_gr2)
+fut_ensemble_85_gr1<-rf_fut_851
+
+plot(fut_ensemble_85_gr1)
 
 fut_ens85_list<-lapply(ls(pattern='fut_ensemble_85_gr'), get)
 
@@ -787,6 +942,8 @@ for (i in 1:length(extract_all)) {
   
   
 }
+
+fut_ensemble_26_gr1<-rf_fut_261
 
 fut_ens26_list<-lapply(ls(pattern='fut_ensemble_26_gr'), get)
 
@@ -1028,7 +1185,7 @@ ggplot(dif85_all_df, aes(x=y, y=values, col=group))+
   #geom_point()+
   geom_smooth(method='loess')+
   theme_bw()+
-  ylim(10,-10)+
+  ylim(-10,10)+
   geom_hline(yintercept=0, linetype='dotted')
 
 
@@ -1108,7 +1265,7 @@ torm<- which(dif_values_all$group==1)
 
 dif_values_filter<-dif_values_all[-torm,]
 
-ggplot(dif_values_filter, aes(x=x, y=values, col=group))+
+ggplot(dif_values_all, aes(x=x, y=values, col=group))+
   geom_smooth(method='loess')+
   labs(x='Latitude', y=' Change in abundance')+
   facet_wrap(~climate)+
@@ -1142,45 +1299,33 @@ ggplot(dif_values_all[dif_values_all$group==1,], aes(x=y, y=values) )+
 #subtropical group; 
 #tropical group: 1
 
-#standardize the groups (test)
-stand<- (dif_list85[[1]]- mean(dif_list85[[1]][dif_list85[[1]]]))/sd(dif_list85[[1]][dif_list85[[1]]])
-stand2<- (dif_list85[[2]]- mean(dif_list85[[2]][dif_list85[[2]]]))/sd(dif_list85[[2]][dif_list85[[2]]])
-
-plot(stand)
-plot(dif_list85[[1]])
-
-plot(stand2)
-plot(dif_list85[[2]]) 
-
-#now actually standardise
-standard<- function (x){
-  return((x- mean(x[x]))/sd(x[x]) )
-}
-
-
-stand_list<-lapply(dif_list85, standard )
-par(mfrow=c(3,3))
-for (i in 1:length(stand_list)){
-  plot(stand_list[[i]])
-} 
+ 
 
 
 #split in tropical and subtropical
-trop_stack<-stack(stand_list[c(3,7)])
-subtrop_stack<-stack(stand_list[c(1,2,4,6)])
+trop_stack<-stack(dif_list85[c(1)])
+subtrop_stack<-stack(dif_list85[c(3,5)])
 
 
 
 plot(trop_stack)
 plot(subtrop_stack)
 
+plot(trop_stack)
+
 
 #where changes
-trop_stack_sum<-(sum(trop_stack)/2) 
+trop_stack_sum<-(sum(trop_stack)) 
 plot(trop_stack_sum)
 
 
-subtrop_stack_sum<-(sum(subtrop_stack)/4)
+subtrop_stack_sum<-(sum(subtrop_stack)/2)
+plot(subtrop_stack_sum)
+
+trop_stack_sum[trop_stack_sum==0]<-NA
+subtrop_stack_sum[subtrop_stack_sum==0]<-NA
+
+
 pall <- c('red3', 'lightsalmon1', 'white', 'cadetblue1', 'blue2')
 
 par(mfrow=c(1,2))
