@@ -729,54 +729,11 @@ for (j in 1:length(extract_all))  {
       obvs<-test$abundance
       
       #make models
-      
-      ##GLM
-      
-      glm1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=train)
-      glm1<- step(glm1, trace = 0, na.action=na.omit)
-      
-      ##GAM
-      gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5), family=nb(), data=train)
-      
-      abundance<-train$abundance
-      abundance<-as.data.frame(abundance)
-      
-      
-      #make df for loop to fill 
-      gam_step_table<-data.frame(summary(gam1)$s.table)
-      out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
-      
-      #set up formula to change 
-      form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) ", sep=""))
-      
-      #run step loop 
-      for(g in out_varib)
-      {
-        g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
-        
-        if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
-        if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
-        if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
-        if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
-        
-        gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
-        
-        if(AIC(gam2)<=AIC(gam1)){form<-form_g1
-        print(paste(g, " dropped", sep=""))}
-      }
-      
-      gam1 <-gam(form, data=train,  family=nb(), na.action=na.omit)
-      
-      
-      #RF
-      rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss  +
-                          BO2_chlomean_ss, data=train, ntree=300, importance=TRUE   )
-      
-      
+
       #predict models for test
-      test_prglm<-predict( glm1, test, type='response')
-      test_prgam<-predict(gam1, test, type='response')
-      test_prRF<-predict(rf1, test, type='response')
+      test_prglm<-predict( glm_list[[j]], test, type='response')
+      test_prgam<-predict(gam_list[[j]], test, type='response')
+      test_prRF<-predict(rf_list[[j+5]], test, type='response')
       
   
       #ok now ensemble these models
