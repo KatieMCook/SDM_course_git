@@ -817,25 +817,6 @@ for (j in 1:length(extract_all))  {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 par(mar=c(1.2,1.2,1.2,1.2))
 par(mfrow=c(2,3))
 
@@ -1350,10 +1331,10 @@ box()
 plot(trop_stack_sum, col=colorRampPalette(pall[1:5])(25),add=TRUE)
 
 
-plot(subtrop_stack_sum, col=colorRampPalette(pall[1:3])(25), main='Subtropical')
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:5])(25), main='Subtropical')
 plot(japan_outline, col='grey68', border='grey68', add=TRUE)
 box()
-plot(subtrop_stack_sum, col=colorRampPalette(pall[1:3])(25),add=TRUE)
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:5])(25),add=TRUE)
 
 
 
