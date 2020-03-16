@@ -696,13 +696,30 @@ ens_vals[i,3]<-cor(exp, obvs, method='pearson')
 plot(obvs~exp)
   
 
-#do it the long way dont be lazy 
+#do it the long way dont be lazy  #works!
+rm(glm_gr)
 
+glm_list<-lapply(ls(pattern='glm_gr'), get)
+
+rm(gam_gr)
+gam_list<-lapply(ls(pattern='gam_gr'), get)
+
+rm(rf_gr)
+
+rf_list<-lapply(ls(pattern='rf_gr'), get)
+
+
+
+for (i in 1:length(extract_all)){
+  df<-data.frame(RMSE=1, pear=1)
+  assign(paste0('ensemble_df',i ), df)
+}
   
-  ens_vals_all<-data.frame(RMSE=1, pear=1)  
+ensemble_df<-lapply(ls(pattern="ensemble_df"),get)
+  
   
 for (j in 1:length(extract_all))  {
-  data<-extract_all[[i]]
+  data<-extract_all[[j]]
   for (i in 1:1000){
     tryCatch( {
       #define test and training data
@@ -714,6 +731,7 @@ for (j in 1:length(extract_all))  {
       #make models
       
       ##GLM
+      
       glm1<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss , data=train)
       glm1<- step(glm1, trace = 0, na.action=na.omit)
       
@@ -779,23 +797,25 @@ for (j in 1:length(extract_all))  {
       ensemble<- ((test_prglm*props[1,1])+(test_prgam*props[1,2])+ (test_prRF*props[1,3]))
       
       #now rmse for all
-      ens_vals_all[i,1]<-rmse(obvs, ensemble)    ###ok this will make a df for each thing but not each group, sort this!!!!
+      ensemble_df[[j]]$RMSE[i]<-rmse(obvs, ensemble)
     
       
       #now pearsons correlation for all 
-      ens_vals_all[i,2]<-cor(obvs, ensemble, method = c("pearson"))
+      ensemble_df[[j]]$pear<-cor(obvs, ensemble, method = c("pearson"))
       
       print(i)
       
     } , error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
-    
+    print(j)
   }
   
   
 }
 
 
-j=3
+j=1
+i=1
+
 
 
 
