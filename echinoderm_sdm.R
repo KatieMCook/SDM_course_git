@@ -20,7 +20,8 @@ library(ggplot2)
 library(raster)
 library(randomForest)
 
-setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
+#setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
+setwd("D:/corona_contingency/SDM_course_git")
 
 #read in Japan if starting ###### START HERE 
 japan_outline<-readOGR('plotting/japan_outline.shp')
@@ -718,6 +719,8 @@ for (i in 1:length(extract_all)){
 
 ensemble_df<-lapply(ls(pattern="ensemble_df"),get)
 
+ensemble_df[[1]][i,1]<-3
+
 
 for (j in 1:length(extract_all))  {
   data<-extract_all[[j]]
@@ -798,11 +801,10 @@ for (j in 1:length(extract_all))  {
       ensemble<- ((test_prglm*props[1,1])+(test_prgam*props[1,2])+ (test_prRF*props[1,3]))
       
       #now rmse for all
-      ensemble_df[[j]]$RMSE[i]<-rmse(obvs, ensemble)
-      
+      ensemble_df[[j]][i,1]<-rmse(obvs, ensemble)
       
       #now pearsons correlation for all 
-      ensemble_df[[j]]$pear<-cor(obvs, ensemble, method = c("pearson"))
+      ensemble_df[[j]][i,2]<-cor(obvs, ensemble, method = c("pearson"))
       
       print(i)
       
@@ -814,7 +816,19 @@ for (j in 1:length(extract_all))  {
 }
 
 
+#ok that worked # get averages 
+average_ens_func<-function(data){
+  
+  rmse_av<- mean(data$RMSE , na.rm=TRUE)
+  pear_av<-mean(data$pear, na.rm=TRUE)
+  
+  averages<-data.frame(RMSE=rmse_av, pear=pear_av)
+  
+  return(averages)
+  
+}
 
+average_ens<-lapply( ensemble_df, average_ens_func)
 
 
 par(mar=c(1.2,1.2,1.2,1.2))
