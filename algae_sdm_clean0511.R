@@ -19,7 +19,7 @@ library(ggplot2)
 library(raster)
 library(randomForest)
 
-setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
+setwd("D:/corona_contingency/SDM_course_git")
 
 #read in Japan if starting ###### START HERE 
 japan_outline<-readOGR('plotting/japan_outline.shp')
@@ -166,92 +166,8 @@ RCP85_2050<-mask(RCP85_2050, predict_area)
 RCP26_2050<-mask(RCP26_2050, predict_area)
 
 
-#standardise coefficients 
-#now write loop to standardise all 
-
-#length(area_pred)
-
-#par(mfrow=c(2,2))
 
 
-#standard<- function(data){
-  #stand_dat<-(data[]-mean(data[], na.rm=TRUE))
-  #return(stand_dat)
-  
-#}
-
-
-
-#for (i in 1:nlayers(area_pred)){
-  stand_ras<-standard(area_pred[[i]])
-  
-  test_ras<-area_pred[[i]]
-  
-  test_ras[]<-stand_ras[]
-  
-  assign(paste0('stand_', i), test_ras)
-  
-}
-
-#plot()
-
-##stand_stack<-stack(stand_1, stand_2, stand_3, stand_4, stand_5)  #issue the mean of bottom light is so low, potentially cut out closer to the coast? carry on for now
-
-#names(stand_stack)
-
-#par(mfrow=c(3,2))
-
-#plot(stand_stack)
-
-#plot(area_pred)
-
-#mean(area_pred[[4]][], na.rm=TRUE)
-
-#par(mfrow=c(1,1))
-#plot(stand_4)
-#plot(area_pred[[4]])
-
-#stand_stack<-current_preds
-
-#ok now standardise future 
-#RCP26
-#for (i in 1:nlayers(RCP26_2050)){
-  stand_ras<-standard(RCP26_2050[[i]])
-  
-  test_ras<-RCP26_2050[[i]]
-  
-  test_ras[]<-stand_ras[]
-  
-  assign(paste0('stand_', i), test_ras)
-  
-}
-
-
-#RCP26_2050<-stack(stand_1, stand_2, stand_3, stand_4, stand_5)
-
-#(stand_stack)
-
-#plot(RCP26_2050)
-
-#RCP85_2050
-
-#for (i in 1:nlayers(RCP85_2050)){
-  stand_ras<-standard(RCP85_2050[[i]])
-  
-  test_ras<-RCP85_2050[[i]]
-  
-  test_ras[]<-stand_ras[]
-  
-  assign(paste0('stand_', i), test_ras)
-  
-}
-
-
-#RCP85_2050<-stack(stand_1, stand_2, stand_3, stand_4, stand_5)
-
-#names(stand_stack)
-
-#plot(RCP85_2050)
 
 
 
@@ -353,7 +269,7 @@ models_all<- function(data){
   rmse_all<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, RFP=1)  
 
   
-  for (i in 1:100){
+  for (i in 1:1000){
     tryCatch( {
     #define test and training data
     test<- data[sample(nrow(data), size=6, replace=FALSE),]  
@@ -658,6 +574,135 @@ pr_gam<-predict(area_pred, gam_gr, type='response')
   assign(paste0('ensemble_gr', i), ensemble)
   
 }
+
+
+
+####now get RMSE and pear for ensemble #####
+
+#set up data frame to be filled
+
+for (i in 1:length(extract_all)){
+  df<-data.frame(RMSE=1, pear=1)
+  assign(paste0('ensemble_df',i ), df)
+}
+
+ensemble_df<-lapply(ls(pattern="ensemble_df"),get)
+
+#now make loop
+
+for (j in 1:length(extract_all))  {
+  data<-extract_all[[j]]
+  for (i in 1:1000){
+    tryCatch( {
+      
+      #define test and training data
+      test<- data[sample(nrow(data), size=6, replace=FALSE),]  
+      train<- data[(! row.names(data) %in% row.names(test)), ]
+      
+      obvs<-test$abundance
+      
+      
+      #GLM 
+      glm_gr<-glm.nb(abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + BO2_chlomean_ss + BO2_lightbotltmax_bdmin,  data=train)
+      glm1<-step(glm_gr, trace = 0, na.action=na.omit)
+      
+      
+      #GAM
+      gam1<-gam(abundance ~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5), family=nb(), data=train)
+      
+      #extract abundance 
+      abundance<-train$abundance
+      abundance<-as.data.frame(abundance)
+      
+      
+      #make df for loop to fill 
+      gam_step_table<-data.frame(summary(gam1)$s.table)
+      out_varib<-row.names(gam_step_table[gam_step_table$p.value>=0.1,])
+      
+      #set up formula to change 
+      form<-formula(paste(abundance, "~ s(BO_sstmin, k=5) + s(BO2_curvelmax_ss, k=5) + s(BO2_salinitymean_ss, k=5) + s(BO2_chlomean_ss, k=5) + s(BO2_lightbotltmax_bdmin, k=5)", sep=""))
+      
+      #run step loop 
+      for(g in out_varib)
+      {
+        g_temp<-paste(unlist(strsplit(g, "\\)")),", k=5)", sep="")
+        
+        if(g_temp=="s(BO_sstmin, k=5)"){form_g1<-update(form, ~. -s(BO_sstmin, k=5, k=5))}
+        if(g_temp=="s(BO2_curvelmax_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_curvelmax_ss, k=5)) }
+        if(g_temp=="s(BO2_salinitymean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_salinitymean_ss, k=5))}
+        if(g_temp=="s(BO2_chlomean_ss, k=5)"){form_g1<-update(form, ~. -s(BO2_chlomean_ss, k=5))}
+        if(g_temp=="s(BO2_lightbotltmax_bdmin, k=5)"){form_g1<-update(form, ~. -s(BO2_lightbotltmax_bdmin, k=5))}
+        
+        gam2 <-gam(form_g1, data=train,  family=nb(), na.action=na.omit)
+        
+        if(AIC(gam2)<=AIC(gam1)){form<-form_g1
+        print(paste(g, " dropped", sep=""))}
+      }
+      
+      gam1<-gam(form, data=train,  family=nb(), na.action=na.omit)  
+      
+      
+      
+      #RF
+      rf1<-randomForest(formula=abundance ~ BO_sstmin + BO2_curvelmax_ss + BO2_salinitymean_ss + 
+                            BO2_chlomean_ss + BO2_lightbotltmax_bdmin, data=train, ntree=300, importance=TRUE   )
+      
+    
+      #predict models for test
+      test_prglm<-predict( glm1, test, type='response')
+      test_prgam<-predict(gam1, test, type='response')
+      test_prRF<-predict(rf1, test, type='response')
+      
+      
+      #ok now ensemble these models
+      #make the ensemble model from RMSE and Pearsons proportions 
+      props<-data.frame(glmR=1, gamR=1, rfR=1, glmP=1, gamP=1, rfP=1)
+      props[1,1]<-(averages[[j]][1,1]/(averages[[j]][1,1]+averages[[j]][1,2]+averages[[j]][1,3]))
+      props[1,2]<-(averages[[j]][1,2]/(averages[[j]][1,1]+averages[[j]][1,2]+averages[[j]][1,3]))
+      props[1,3]<-(averages[[j]][1,3]/(averages[[j]][1,1]+averages[[j]][1,2]+averages[[j]][1,3]))
+      props[1,4]<-abs(average_pear[[j]][1,1])/(abs(average_pear[[j]][1,1])+abs(average_pear[[j]][1,2])+abs(average_pear[[j]][1,3]))
+      props[1,5]<-abs(average_pear[[j]][1,2])/(abs(average_pear[[j]][1,1])+abs(average_pear[[j]][1,2])+abs(average_pear[[j]][1,3]))
+      props[1,6]<-abs(average_pear[[j]][1,3])/(abs(average_pear[[j]][1,1])+abs(average_pear[[j]][1,2])+abs(average_pear[[j]][1,3]))
+      
+      props<-data.frame(glm=((props[1,1]+props[1,4])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])), 
+                        gam=((props[1,2]+props[1,5])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])),
+                        rf=((props[1,3]+props[1,6])/(props[1,1]+props[1,2]+props[1,3]+props[1,4]+props[1,5]+props[1,6])))
+      
+      
+      ensemble<- ((test_prglm*props[1,1])+(test_prgam*props[1,2])+ (test_prRF*props[1,3]))
+      
+      #now rmse for all
+      ensemble_df[[j]][i,1]<-rmse(obvs, ensemble)
+      
+      #now pearsons correlation for all 
+      ensemble_df[[j]][i,2]<-cor(obvs, ensemble, method = c("pearson"))
+      
+      print(i)
+      
+    } , error=function(e){cat("ERROR :",conditionMessage(e), "\n")})
+    print(j)
+  }
+  
+  
+}
+
+j=1
+i=1
+
+#now get ens averages
+#ok that worked # get averages 
+average_ens_func<-function(data){
+  
+  rmse_av<- mean(data$RMSE , na.rm=TRUE)
+  pear_av<-mean(data$pear, na.rm=TRUE)
+  
+  averages<-data.frame(RMSE=rmse_av, pear=pear_av)
+  
+  return(averages)
+  
+}
+
+average_ens<-lapply( ensemble_df, average_ens_func)
 
 
 
@@ -1188,7 +1233,61 @@ setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
 writeRaster(subtrop_stack_sum, 'change_hotspots/algae_subtrop_hotspots.tif', format='GTiff')
 writeRaster(trop_stack_sum, 'change_hotspots/algae_trop_hotspots.tif', format='GTiff')
 
+#plot hotspot areas
+#split in tropical and subtropical
+trop_stack<-stack(dif_list85[c(1)])
+subtrop_stack<-stack(dif_list85[c(2,3,4,5)])
 
+
+
+plot(trop_stack)
+plot(subtrop_stack)
+
+
+
+#where changes
+trop_stack_sum<-(sum(trop_stack)) 
+plot(trop_stack_sum)
+
+
+subtrop_stack_sum<-(sum(subtrop_stack)/2)
+plot(subtrop_stack_sum)
+
+#trop_stack_sum[trop_stack_sum==0]<-NA
+#subtrop_stack_sum[subtrop_stack_sum==0]<-NA
+
+plot(subtrop_stack_sum)
+
+pall <- c('red3', 'lightsalmon1', 'white', 'cadetblue1', 'blue2')
+
+par(mfrow=c(1,2))
+plot(trop_stack_sum, col=colorRampPalette(pall[1:5])(25), main='Tropical')
+plot(japan_outline, col='grey68', border='grey68', add=TRUE)
+box()
+plot(trop_stack_sum, col=colorRampPalette(pall[1:5])(25),add=TRUE)
+
+
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:5])(25), main='Subtropical')
+plot(japan_outline, col='grey68', border='grey68', add=TRUE)
+box()
+plot(subtrop_stack_sum, col=colorRampPalette(pall[1:5])(25),add=TRUE)
+
+
+
+writeRaster(subtrop_stack_sum, 'change_hotspots/algae_subtrop_hotspots.tif', format='GTiff', overwrite=TRUE)
+writeRaster(trop_stack_sum, 'change_hotspots/algae_trop_hotspots.tif', format='GTiff', overwrite=TRUE)
+
+
+#need to get the same legend
+stack_posterplot<-stack(dif_list[[2]], dif_list[[4]], dif_list[[5]], dif_list[[8]])
+
+par(mfrow=c(2,2),  mai = c(0.3,0.2,0.2,0.2))
+
+plot(stack_posterplot)
+
+p1<-spplot(stack_posterplot, col.regions=terrain.colors)
+p1
+p1+layer(sp.polygons(japan_outline))
 
 
 
