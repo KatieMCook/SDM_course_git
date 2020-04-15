@@ -23,8 +23,8 @@ library(randomForest)
 library(mgcv)
 library(MASS)
 
-setwd("S:/Beger group/Katie Cook/Japan_data/SDM_course_git")
-
+#setwd("S:/Beger group/Katie CookJapan_data/SDM_course_git")
+setwd("D:/corona_contingency/SDM_course_git")
 #read in Japan if starting ###### START HERE 
 japan_outline<-readOGR('plotting/japan_outline.shp')
 
@@ -688,7 +688,7 @@ for (i in 1:1000){
 
 allrmse<-lapply(extract_all, models_all)
 
-
+###RUN FROM HERE MONDAY ####
 
 #get averages as it didnt work 
 
@@ -966,13 +966,13 @@ for ( i in 1:length(ens_list)){
 
 #do it the long way dont be lazy  #works!
 
-
 for (i in 1:length(extract_all)){
   df<-data.frame(RMSE=1, pear=1)
   assign(paste0('ensemble_df',LETTERS[i] ), df)
 }
 
 ensemble_df<-lapply(ls(pattern="ensemble_df"),get)
+
 
 
 for (j in 1:length(extract_all))  {
@@ -1054,11 +1054,10 @@ for (j in 1:length(extract_all))  {
       ensemble<- ((test_prglm*props[1,1])+(test_prgam*props[1,2])+ (test_prRF*props[1,3]))
       
       #now rmse for all
-      ensemble_df[[j]]$RMSE[i]<-rmse(obvs, ensemble)
-      
+      ensemble_df[[j]][i,1]<-rmse(obvs, ensemble)
       
       #now pearsons correlation for all 
-      ensemble_df[[j]]$pear<-cor(obvs, ensemble, method = c("pearson"))
+      ensemble_df[[j]][i,2]<-cor(obvs, ensemble, method = c("pearson"))
       
       print(i)
       
@@ -1068,6 +1067,22 @@ for (j in 1:length(extract_all))  {
   
   
 }
+
+
+#ok that worked # get averages 
+average_ens_func<-function(data){
+  
+  rmse_av<- mean(data$RMSE , na.rm=TRUE)
+  pear_av<-mean(data$pear, na.rm=TRUE)
+  
+  averages<-data.frame(RMSE=rmse_av, pear=pear_av)
+  
+  return(averages)
+  
+}
+
+average_ens<-lapply( ensemble_df, average_ens_func)
+
 
 
 j=1
@@ -1484,12 +1499,45 @@ ggplot(dif_values_all, aes(x=y, y=values, col=group))+
 write.csv(dif_values_all, 'dif_values_all_fish_jan.csv')
 
 
+#new hotspots
+#ooookkkkk
+#now can find where the areas change the most
+#split in tropical and subtropical
+trop_stack<-stack(dif_list85[c(1,3,4,5,6,7,9,11,12)])
+subtrop_stack<-stack(dif_list85[c(2,8)])
+
+plot(trop_stack)
+plot(subtrop_stack)
+
+plot(trop_stack)
+
+
+#where changes
+trop_stack_sum<-(sum(trop_stack)/9) 
+plot(trop_stack_sum)
+
+
+subtrop_stack_sum<-(sum(subtrop_stack)/2)
+plot(subtrop_stack_sum)
+
+#trop_stack_sum[trop_stack_sum==0]<-NA
+#subtrop_stack_sum[subtrop_stack_sum==0]<-NA
+
+
+
+writeRaster(subtrop_stack_sum, 'change_hotspots/fish_subtrop_hotspots.tif', format='GTiff', overwrite=TRUE)
+writeRaster(trop_stack_sum, 'change_hotspots/fish_trop_hotspots.tif', format='GTiff', overwrite=TRUE)
+
+
+
+
 
 #HOTSPOTS
 #now actually standardise #no 
 #standard<- function (x){
  # return((x- mean(x[x]))/sd(x[x]) )
 #}
+
 
 
 stand_list<-dif_mask85
@@ -1698,4 +1746,31 @@ plot(stack_posterplot)
 p1<-spplot(stack_posterplot, col.regions=terrain.colors)
 p1
 p1+layer(sp.polygons(japan_outline))
+
+#extract dif at lat lons
+lonlat<-data.frame(lon=latlon$lon, lat=latlon$lat)
+
+for (i in 1:length(dif_list85)){
+  dif_sites<- extract(dif_list85[[i]], lonlat )
+  dif_sites<-data.frame(site= latlon$Site, change= dif_sites)
+  assign(paste0('dif_sites', LETTERS[i]), dif_sites)
+}
+
+rm(dif_sites)
+dif_site_list<- lapply(ls(pattern='dif_sites'), get)
+
+#now add on group number to list and unlist into one big df.
+for(i in 1:length(dif_site_list)){
+  dif_site_list[[i]]$group<-paste0('fish', i)
+}
+
+dif_site_all<-do.call(rbind, dif_site_list)
+
+#rm groups with are NaN
+torm<- which(dif_site_all$change=='NaN')
+
+dif_site_all<- dif_site_all[-c(torm), ]
+
+#now write csv
+write.csv(dif_site_all, 'dif_site_fish.csv')
 
