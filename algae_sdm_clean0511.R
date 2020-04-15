@@ -1290,6 +1290,31 @@ p1
 p1+layer(sp.polygons(japan_outline))
 
 
+### GET DF FOR PCA ----
+#extract dif at lat lons
+lonlat<-data.frame(lon=latlon$lon, lat=latlon$lat)
+
+for (i in 1:length(dif_list85)){
+  dif_sites<- extract(dif_list85[[i]], lonlat )
+  dif_sites<-data.frame(site= latlon$Site, change= dif_sites)
+  assign(paste0('dif_sites', i), dif_sites)
+}
+
+rm(dif_sites)
+dif_site_list<- lapply(ls(pattern='dif_sites'), get)
+
+#now add on group number to list and unlist into one big df.
+for(i in 1:length(dif_site_list)){
+  dif_site_list[[i]]$group<-paste0('algae', i)
+}
+
+dif_site_all<-do.call(rbind, dif_site_list)
+
+
+
+#now write csv
+write.csv(dif_site_all, 'dif_site_alage.csv')
+
 
 
 
